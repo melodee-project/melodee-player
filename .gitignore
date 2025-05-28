@@ -1,0 +1,82 @@
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file
+local.properties
+
+# Android Studio generated files
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Keystore files
+*.jks
+*.keystore
+
+# External native build folder
+.externalNativeBuild/
+.cxx/
+
+# Version control
+vcs.xml
+
+# Log Files
+*.log
+
+# Android Studio captures folder
+captures/
+
+# Generated files
+bin/
+gen/
+out/
+
+# Proguard folder
+proguard/
+
+# Android Profiling
+*.hprof
+
+# Kotlin
+*.kotlin_module
+
+# Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Keystore files
+*.jks
+*.keystore
+
+# External native build folder
+.externalNativeBuild/
+.cxx/
+
+# Version control
+vcs.xml
+
+# Log Files
+*.log
+
+# Android Studio captures folder
+captures/
+
+# Generated files
+bin/
+gen/
+out/
+
+# Proguard folder
+proguard/
+
+# Android Profiling
+*.hprof
+
+# Kotlin
+*.kotlin_module 
