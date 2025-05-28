@@ -106,7 +106,7 @@ The application follows **Clean Architecture** with **MVVM** pattern:
 - **Android SDK**: API 21-35
 - **Kotlin**: 1.9.20
 - **Gradle**: 8.12
-- **Android Gradle Plugin**: 8.1.0
+- **Android Gradle Plugin**: 8.10.0
 
 ### Device Requirements
 - **Minimum SDK**: API 21 (Android 5.0)
