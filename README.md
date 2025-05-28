@@ -2,6 +2,8 @@
 
 A native Android music player application that allows users to stream music from Melodee servers. The application is built using modern Android development practices with Jetpack Compose and supports Android Auto integration for in-car entertainment.
 
+This app is very heavily vibe coded.
+
 ## Features
 
 - 🚗 **Android Auto Integration** - Full support with voice commands and car-optimized UI
