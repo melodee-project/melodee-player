@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'MelodeeAndroidAuto'
-include ':app' 
+rootProject.name = "MelodeeAndroidAuto"
+include(":app") 
