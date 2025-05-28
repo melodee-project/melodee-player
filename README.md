@@ -1,6 +1,6 @@
-# Melodee Android Auto Player
+# Melodee Player
 
-An Android Auto music player application that allows users to stream music from a custom API. The application is built using modern Android development practices and supports Android Auto integration.
+An native Android music player application that allows users to stream music from Melodee. The application is built using modern Android development practices and supports Android Auto integration.
 
 ## Features
 
