@@ -313,7 +313,7 @@ private fun SongItem(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = song.formattedDuration,
+                text = song.durationFormatted,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

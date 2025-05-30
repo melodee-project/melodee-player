@@ -38,7 +38,7 @@ data class Song(
     val thumbnailUrl: String,
     val imageUrl: String,
     val durationMs: Double,
-    val formattedDuration: String,
+    val durationFormatted: String,
     val userStarred: Boolean = false,
     val userRating: Double
 ) : Parcelable {
@@ -65,7 +65,7 @@ data class Song(
         parcel.writeString(thumbnailUrl)
         parcel.writeString(imageUrl)
         parcel.writeDouble(durationMs)
-        parcel.writeString(formattedDuration)
+        parcel.writeString(durationFormatted)
         parcel.writeByte(if (userStarred) 1 else 0)
         parcel.writeDouble(userRating)
     }

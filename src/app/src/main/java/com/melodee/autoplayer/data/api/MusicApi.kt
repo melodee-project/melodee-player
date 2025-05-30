@@ -22,7 +22,7 @@ interface MusicApi {
         @Query("pageSize") pageSize: Int = 20
     ): PaginatedResponse<Song>
 
-    @GET("search")
+    @GET("search/songs")
     suspend fun searchSongs(
         @Query("q") query: String,
         @Query("page") page: Int,
