@@ -12,22 +12,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import coil.size.Scale
 import androidx.compose.ui.layout.ContentScale
-import coil.compose.rememberAsyncImagePainter
 import com.melodee.autoplayer.R
 import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
-import com.melodee.autoplayer.domain.model.User
-import okhttp3.OkHttpClient
-import okhttp3.Protocol
-import java.util.concurrent.TimeUnit
 import android.media.session.MediaSessionManager
 import android.media.session.MediaController
 import android.media.MediaMetadata
@@ -36,32 +29,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import android.content.Intent
 import android.media.session.PlaybackState
-import android.Manifest
-import androidx.activity.result.contract.ActivityResultContracts
-import android.os.Build
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
-import com.melodee.autoplayer.service.MusicService
-import androidx.activity.compose.rememberLauncherForActivityResult
-import android.content.pm.PackageManager
-import android.widget.Toast
 import com.melodee.autoplayer.util.rememberPermissionState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
 import com.melodee.autoplayer.presentation.ui.components.FullImageViewer
-import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -218,20 +197,20 @@ fun HomeScreen(
                     ) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(currentUser.avatarThumbnailUrl)
+                                .data(currentUser.thumbnailUrl)
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "User avatar",
                             modifier = Modifier.size(48.dp),
                             error = painterResource(id = R.drawable.ic_launcher_foreground),
                             onError = {
-                                Log.e("HomeScreen", "Failed to load user avatar: ${currentUser.avatarThumbnailUrl}")
+                                Log.e("HomeScreen", "Failed to load user avatar: ${currentUser.thumbnailUrl}")
                             },
                             contentScale = ContentScale.Crop
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = currentUser.userName,
+                            text = currentUser.username,
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -385,7 +364,7 @@ private fun PlaylistItem(
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "${playlist.songsCount} songs • ${playlist.durationFormatted}",
+                    text = "${playlist.songCount} songs • ${playlist.durationFormatted}",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -463,7 +442,7 @@ private fun SongItem(
             modifier = Modifier.weight(1f)
         ) {
             Text(
-                text = song.name,
+                text = song.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -515,7 +494,7 @@ private fun SongItem(
     if (showFullImage) {
         FullImageViewer(
             imageUrl = song.imageUrl,
-            contentDescription = "Song Image - ${song.name}",
+            contentDescription = "Song Image - ${song.title}",
             onDismiss = { showFullImage = false }
         )
     }

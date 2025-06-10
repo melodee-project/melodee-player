@@ -49,7 +49,7 @@ class MusicNotificationManager(private val context: Context) {
         )
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(song?.name ?: context.getString(R.string.no_song_playing))
+            .setContentTitle(song?.title ?: context.getString(R.string.no_song_playing))
             .setContentText(song?.artist?.name ?: context.getString(R.string.unknown_artist))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)

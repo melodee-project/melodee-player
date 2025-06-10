@@ -90,7 +90,7 @@ class NowPlayingViewModel : ViewModel() {
                 // Observe playlist manager state
                 service.getPlaylistManager().currentSong.collect { song ->
                     _currentSong.value = song
-                    Log.d("NowPlayingViewModel", "Current song updated: ${song?.name}")
+                    Log.d("NowPlayingViewModel", "Current song updated: ${song?.title}")
                 }
             }
         }
@@ -206,7 +206,7 @@ class NowPlayingViewModel : ViewModel() {
     }
     
     fun playSong(song: Song) {
-        Log.d("NowPlayingViewModel", "Play song: ${song.name}")
+        Log.d("NowPlayingViewModel", "Play song: ${song.title}")
         _currentSong.value = song
         _isPlaying.value = true
         context?.let { ctx ->
@@ -225,7 +225,7 @@ class NowPlayingViewModel : ViewModel() {
     }
     
     fun addToQueue(song: Song) {
-        Log.d("NowPlayingViewModel", "Add to queue: ${song.name}")
+        Log.d("NowPlayingViewModel", "Add to queue: ${song.title}")
         musicService?.getQueueManager()?.addToQueue(song)
     }
     

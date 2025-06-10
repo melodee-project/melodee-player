@@ -33,7 +33,7 @@ class PlaylistManager {
         return if (index >= 0) {
             _currentIndex.value = index
             _currentSong.value = song
-            Log.d("PlaylistManager", "Playing song: ${song.name} at index $index")
+            Log.d("PlaylistManager", "Playing song: ${song.title} at index $index")
             true
         } else {
             // Song not in current playlist, add it and play
@@ -42,7 +42,7 @@ class PlaylistManager {
             _currentPlaylist.value = currentList
             _currentIndex.value = currentList.size - 1
             _currentSong.value = song
-            Log.d("PlaylistManager", "Added and playing song: ${song.name} at index ${currentList.size - 1}")
+            Log.d("PlaylistManager", "Added and playing song: ${song.title} at index ${currentList.size - 1}")
             true
         }
     }

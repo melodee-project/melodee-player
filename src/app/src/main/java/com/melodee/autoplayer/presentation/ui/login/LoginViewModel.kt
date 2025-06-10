@@ -60,7 +60,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         // Store user information in settings
                         settingsManager.userId = response.user.id.toString()
                         settingsManager.userEmail = response.user.email
-                        settingsManager.userName = response.user.userName
+                        settingsManager.username = response.user.username
                         settingsManager.authToken = response.token
                         
                         _loginState.value = LoginState.Success(response)

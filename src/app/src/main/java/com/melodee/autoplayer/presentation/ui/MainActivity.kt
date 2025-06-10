@@ -36,7 +36,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.melodee.autoplayer.domain.model.AuthResponse
-import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.presentation.ui.about.AboutScreen
 import com.melodee.autoplayer.presentation.ui.home.HomeScreen
 import com.melodee.autoplayer.presentation.ui.home.HomeViewModel
@@ -50,8 +49,6 @@ import com.melodee.autoplayer.presentation.ui.settings.ThemeSettingsScreen
 import com.melodee.autoplayer.ui.theme.*
 import com.melodee.autoplayer.service.MusicService
 import android.support.v4.media.MediaBrowserCompat
-import android.support.v4.media.session.MediaControllerCompat
-import com.melodee.autoplayer.presentation.ui.components.MiniPlayer
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -248,7 +245,7 @@ fun MainScreen(
     }
     
     LaunchedEffect(playlistCurrentSong, playlistIsPlaying) {
-        Log.d("MainActivity", "PLAYLIST STATE CHANGED - song: ${playlistCurrentSong?.name}, playing: $playlistIsPlaying")
+        Log.d("MainActivity", "PLAYLIST STATE CHANGED - song: ${playlistCurrentSong?.title}, playing: $playlistIsPlaying")
     }
     
     // Determine global playback state - now that ViewModels are context-aware, this is simpler
@@ -257,25 +254,25 @@ fun MainScreen(
             // Home search results if playing and valid
             homeIsPlaying && homeCurrentIndex >= 0 && homeCurrentIndex < homeCurrentSongs.size -> {
                 val song = homeCurrentSongs[homeCurrentIndex]
-                Log.d("MainActivity", "Using home search song: ${song.name}")
+                Log.d("MainActivity", "Using home search song: ${song.title}")
                 song
             }
             // Playlist if playing
             playlistCurrentSong != null && playlistIsPlaying -> {
                 val song = playlistCurrentSong
-                Log.d("MainActivity", "Using playlist song: ${song?.name}")
+                Log.d("MainActivity", "Using playlist song: ${song?.title}")
                 song
             }
             // Fallback: show home song even if not playing (paused state)
             homeCurrentIndex >= 0 && homeCurrentIndex < homeCurrentSongs.size -> {
                 val song = homeCurrentSongs[homeCurrentIndex]
-                Log.d("MainActivity", "Using home search song (paused): ${song.name}")
+                Log.d("MainActivity", "Using home search song (paused): ${song.title}")
                 song
             }
             // Fallback: show playlist song even if not playing (paused state)
             playlistCurrentSong != null -> {
                 val song = playlistCurrentSong
-                Log.d("MainActivity", "Using playlist song (paused): ${song?.name}")
+                Log.d("MainActivity", "Using playlist song (paused): ${song?.title}")
                 song
             }
             else -> {
@@ -288,9 +285,9 @@ fun MainScreen(
         Log.d("MainActivity", "homeIsPlaying: $homeIsPlaying")
         Log.d("MainActivity", "homeCurrentIndex: $homeCurrentIndex") 
         Log.d("MainActivity", "homeCurrentSongs.size: ${homeCurrentSongs.size}")
-        Log.d("MainActivity", "playlistCurrentSong: ${playlistCurrentSong?.name}")
+        Log.d("MainActivity", "playlistCurrentSong: ${playlistCurrentSong?.title}")
         Log.d("MainActivity", "playlistIsPlaying: $playlistIsPlaying")
-        Log.d("MainActivity", "Final result: ${result?.name}")
+        Log.d("MainActivity", "Final result: ${result?.title}")
         Log.d("MainActivity", "========================")
         result
     }

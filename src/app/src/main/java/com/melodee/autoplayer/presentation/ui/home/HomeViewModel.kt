@@ -106,7 +106,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             musicService?.let { service ->
                 // Observe playlist manager state to track current song changes
                 service.getPlaylistManager().currentSong.collect { song ->
-                    Log.d("HomeViewModel", "Service current song updated: ${song?.name}")
+                    Log.d("HomeViewModel", "Service current song updated: ${song?.title}")
                     
                     // Check if the current playback context is SEARCH
                     val playbackContext = service.getCurrentPlaybackContext()
@@ -225,9 +225,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _user.value = User(
                     id = UUID.randomUUID(),
                     email = "test@example.com",
-                    avatarThumbnailUrl = "https://example.com/avatar.jpg",
-                    avatarUrl = "https://example.com/avatar.jpg",
-                    userName = "Test User"
+                    thumbnailUrl = "https://example.com/avatar.jpg",
+                    imageUrl = "https://example.com/avatar.jpg",
+                    username = "Test User"
                 )
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error loading user", e)
@@ -317,7 +317,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     ?.collect { response ->
                         Log.d("HomeViewModel", "Received playlists response: ${response.data.size} items")
                         response.data.forEach { playlist ->
-                            Log.d("HomeViewModel", "Playlist: ${playlist.name}, Song count: ${playlist.songsCount}")
+                            Log.d("HomeViewModel", "Playlist: ${playlist.name}, Song count: ${playlist.songCount}")
                         }
                         _playlists.value = if (currentPage == 1) {
                             response.data
@@ -408,7 +408,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setUser(user: User) {
-        Log.d("HomeViewModel", "Setting user: ${user.userName}")
+        Log.d("HomeViewModel", "Setting user: ${user.username}")
         _user.value = user
         
         // Load playlists when user is set (after authentication)
@@ -420,7 +420,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun playSong(song: Song) {
         val index = songs.value.indexOf(song)
         Log.d("HomeViewModel", "=== PLAY SONG DEBUG ===")
-        Log.d("HomeViewModel", "playSong called - song: ${song.name}")
+        Log.d("HomeViewModel", "playSong called - song: ${song.title}")
         Log.d("HomeViewModel", "Song index in search results: $index")
         Log.d("HomeViewModel", "Total songs in search results: ${songs.value.size}")
         Log.d("HomeViewModel", "Current search query: '${_searchQuery.value}'")

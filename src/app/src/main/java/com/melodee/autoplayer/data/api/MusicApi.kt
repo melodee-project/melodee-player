@@ -4,18 +4,18 @@ import com.melodee.autoplayer.domain.model.*
 import retrofit2.http.*
 
 interface MusicApi {
-    @POST("user/authenticate")
+    @POST("users/authenticate")
     suspend fun login(
         @Body credentials: Map<String, String>
     ): AuthResponse
 
-    @GET("user/playlists")
+    @GET("users/playlists")
     suspend fun getPlaylists(
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 20
     ): PaginatedResponse<Playlist>
 
-    @GET("playlist/{playlistId}/songs")
+    @GET("playlists/{playlistId}/songs")
     suspend fun getPlaylistSongs(
         @Path("playlistId") playlistId: String,
         @Query("page") page: Int,
@@ -29,7 +29,7 @@ interface MusicApi {
         @Query("pageSize") pageSize: Int = 20
     ): PaginatedResponse<Song>
 
-    @POST("song/starred/{songId}/{userStarred}")
+    @POST("songs/starred/{songId}/{userStarred}")
     suspend fun favoriteSong(
         @Path("songId") songId: String,
         @Path("userStarred") userStarred: Boolean

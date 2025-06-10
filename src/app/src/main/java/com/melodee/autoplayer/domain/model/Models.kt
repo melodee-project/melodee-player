@@ -18,6 +18,24 @@ data class PaginationMeta(
     val hasNext: Boolean
 )
 
+data class SearchResultData(
+    val meta: PaginationMeta,
+    val data: SearchData
+)
+
+data class SearchData(
+    val totalCount: Int,
+    val artists: List<Artist>,
+    val totalArtists: Int,
+    val albums: List<Album>,
+    val totalAlbums: Int,
+    val songs: List<Song>,
+    val totalSongs: Int,
+    val playlists: List<Playlist>,
+    val totalPlaylists: Int
+)
+
+
 data class Playlist(
     val id: UUID,
     val name: String,
@@ -26,13 +44,13 @@ data class Playlist(
     val thumbnailUrl: String,
     val durationMs: Double,
     val durationFormatted: String,
-    val songsCount: Int
+    val songCount: Int
 )
 
 data class Song(
     val id: UUID,
     val streamUrl: String,
-    val name: String,
+    val title: String,
     val artist: Artist,
     val album: Album,
     val thumbnailUrl: String,
@@ -59,7 +77,7 @@ data class Song(
     override fun writeToParcel(parcel: Parcel, flags: Int) {
         parcel.writeString(id.toString())
         parcel.writeString(streamUrl)
-        parcel.writeString(name)
+        parcel.writeString(title)
         parcel.writeParcelable(artist, flags)
         parcel.writeParcelable(album, flags)
         parcel.writeString(thumbnailUrl)
@@ -172,13 +190,14 @@ data class Album(
 
 data class AuthResponse(
     val token: String,
+    var serverVersion: String,
     val user: User
 )
 
 data class User(
     val id: UUID,
     val email: String,
-    val avatarThumbnailUrl: String,
-    val avatarUrl: String,
-    val userName: String
+    val thumbnailUrl: String,
+    val imageUrl: String,
+    val username: String
 ) 

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -15,10 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.melodee.autoplayer.domain.model.Song
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,30 +29,18 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.content.pm.PackageManager
-import android.widget.Toast
 import android.media.session.MediaSessionManager
 import android.media.session.MediaController
 import android.media.MediaMetadata
 import android.content.Context
 import java.lang.SecurityException
 import com.melodee.autoplayer.util.rememberPermissionState
-import android.content.Intent
-import com.melodee.autoplayer.service.MusicService
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.font.FontWeight
 import com.melodee.autoplayer.presentation.ui.components.FullImageViewer
-import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -177,7 +161,7 @@ fun PlaylistScreen(
                                     )
                                 }
                                 Text(
-                                    text = "${currentPlaylist.songsCount} songs • ${currentPlaylist.durationFormatted}",
+                                    text = "${currentPlaylist.songCount} songs • ${currentPlaylist.durationFormatted}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.padding(top = 8.dp)
                                 )
@@ -299,7 +283,7 @@ private fun SongItem(
             modifier = Modifier.weight(1f)
         ) {
             Text(
-                text = song.name,
+                text = song.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (isPlaying || isCurrentlyPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -351,7 +335,7 @@ private fun SongItem(
     if (showFullImage) {
         FullImageViewer(
             imageUrl = song.imageUrl,
-            contentDescription = "Song Image - ${song.name}",
+            contentDescription = "Song Image - ${song.title}",
             onDismiss = { showFullImage = false }
         )
     }

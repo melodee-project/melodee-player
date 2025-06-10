@@ -19,7 +19,7 @@ class SettingsManager(context: Context) {
         get() = prefs.getString(KEY_USER_EMAIL, "") ?: ""
         set(value) = prefs.edit().putString(KEY_USER_EMAIL, value).apply()
 
-    var userName: String
+    var username: String
         get() = prefs.getString(KEY_USER_NAME, "") ?: ""
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 

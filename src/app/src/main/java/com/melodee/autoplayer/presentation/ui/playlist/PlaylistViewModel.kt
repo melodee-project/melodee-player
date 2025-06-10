@@ -19,10 +19,7 @@ import com.melodee.autoplayer.service.MusicService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import android.media.session.MediaSessionManager
 import kotlinx.coroutines.Job
-import android.media.session.MediaController
-import android.media.MediaMetadata
 import java.util.*
 import android.util.Log
 
@@ -156,7 +153,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             musicService?.let { service ->
                 // Observe playlist manager state to track current song changes
                 service.getPlaylistManager().currentSong.collect { song ->
-                    Log.d("PlaylistViewModel", "Service current song updated: ${song?.name}")
+                    Log.d("PlaylistViewModel", "Service current song updated: ${song?.title}")
                     
                     // Check if the current playback context is PLAYLIST
                     val playbackContext = service.getCurrentPlaybackContext()
@@ -164,7 +161,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                     
                     if (song != null && playbackContext == MusicService.PlaybackContext.PLAYLIST && _songs.value.contains(song)) {
                         // Only update if the song is in our current playlist and context is PLAYLIST
-                        Log.d("PlaylistViewModel", "Setting current song: ${song.name} (PLAYLIST context)")
+                        Log.d("PlaylistViewModel", "Setting current song: ${song.title} (PLAYLIST context)")
                         _currentSong.value = song
                         _isPlaying.value = service.isPlaying()
                     } else if (playbackContext != MusicService.PlaybackContext.PLAYLIST) {

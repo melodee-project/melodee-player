@@ -28,7 +28,6 @@ import com.melodee.autoplayer.presentation.ui.MainActivity
 import com.melodee.autoplayer.data.SettingsManager
 import com.melodee.autoplayer.data.api.NetworkModule
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
 
 class MusicService : MediaBrowserServiceCompat() {
     private var player: ExoPlayer? = null
@@ -203,7 +202,7 @@ class MusicService : MediaBrowserServiceCompat() {
         return MediaBrowserCompat.MediaItem(
             MediaDescriptionCompat.Builder()
                 .setMediaId(song.id.toString())
-                .setTitle(song.name)
+                .setTitle(song.title)
                 .setSubtitle(song.artist.name)
                 .setDescription(song.album.name)
                 .setIconUri(android.net.Uri.parse(song.thumbnailUrl))
@@ -218,7 +217,7 @@ class MusicService : MediaBrowserServiceCompat() {
         when (intent?.action) {
             ACTION_PLAY_SONG -> {
                 val song = intent.getParcelableExtra<Song>(EXTRA_SONG)
-                Log.d("MusicService", "Received play command for song: ${song?.name}")
+                Log.d("MusicService", "Received play command for song: ${song?.title}")
                 if (song != null) {
                     // Set context to single song if no queue is set
                     if (queueManager.getQueueSize() == 0) {
@@ -370,7 +369,7 @@ class MusicService : MediaBrowserServiceCompat() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(song?.name ?: "Melodee")
+            .setContentTitle(song?.title ?: "Melodee")
             .setContentText(song?.artist?.name ?: "Music Player")
             .setSubText(song?.album?.name)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -408,7 +407,7 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     private fun playSong(song: Song) {
-        Log.d("MusicService", "Playing song: ${song.name}")
+        Log.d("MusicService", "Playing song: ${song.title}")
         Log.d("MusicService", "Stream URL: ${song.streamUrl}")
         
         // Stop tracking previous song
@@ -460,7 +459,7 @@ class MusicService : MediaBrowserServiceCompat() {
                                 val duration = this@apply.duration
                                 if (duration > 0) {
                                     scrobbleManager?.startTracking(song, duration)
-                                    Log.d("MusicService", "Started scrobble tracking for: ${song.name}, duration: $duration")
+                                    Log.d("MusicService", "Started scrobble tracking for: ${song.title}, duration: $duration")
                                 }
                             }
                         }
@@ -587,7 +586,7 @@ class MusicService : MediaBrowserServiceCompat() {
         
         val metadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, song.id.toString())
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, song.name)
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, song.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, song.artist.name)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, song.album.name)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, song.imageUrl)
@@ -596,7 +595,7 @@ class MusicService : MediaBrowserServiceCompat() {
             .build()
 
         mediaSession.setMetadata(metadata)
-        Log.d("MusicService", "Updated MediaSession metadata for: ${song.name}, duration: $duration")
+        Log.d("MusicService", "Updated MediaSession metadata for: ${song.title}, duration: $duration")
     }
 
     private fun updateMediaSessionMetadataWithDuration() {
@@ -641,12 +640,12 @@ class MusicService : MediaBrowserServiceCompat() {
                 // For playlist context, check if there are more songs in the playlist
                 val nextSong = queueManager.getNextSong()
                 if (nextSong != null) {
-                    Log.d("MusicService", "Playing next song from playlist: ${nextSong.name}")
+                    Log.d("MusicService", "Playing next song from playlist: ${nextSong.title}")
                     // Update both managers to keep them synchronized
                     queueManager.playSong(nextSong)
                     playlistManager.playSong(nextSong)
                     playSong(nextSong)
-                    Log.d("MusicService", "Successfully started playing next song: ${nextSong.name}")
+                    Log.d("MusicService", "Successfully started playing next song: ${nextSong.title}")
                 } else {
                     // If repeat mode is NONE and we're at the end, try to get the next song manually
                     if (queueManager.getRepeatMode() == QueueManager.RepeatMode.NONE) {
@@ -656,11 +655,11 @@ class MusicService : MediaBrowserServiceCompat() {
                         
                         if (nextIndex < queue.size) {
                             val manualNextSong = queue[nextIndex]
-                            Log.d("MusicService", "Playing next song from playlist (manual): ${manualNextSong.name}")
+                            Log.d("MusicService", "Playing next song from playlist (manual): ${manualNextSong.title}")
                             queueManager.playSong(manualNextSong)
                             playlistManager.playSong(manualNextSong)
                             playSong(manualNextSong)
-                            Log.d("MusicService", "Successfully started playing next song: ${manualNextSong.name}")
+                            Log.d("MusicService", "Successfully started playing next song: ${manualNextSong.title}")
                         } else {
                             Log.d("MusicService", "Reached end of playlist, stopping playback")
                             stopPlayback()
@@ -675,12 +674,12 @@ class MusicService : MediaBrowserServiceCompat() {
                 // For search context, check if there are more songs from search results
                 val nextSong = queueManager.getNextSong()
                 if (nextSong != null) {
-                    Log.d("MusicService", "Playing next song from search results: ${nextSong.name}")
+                    Log.d("MusicService", "Playing next song from search results: ${nextSong.title}")
                     // Update both managers to keep them synchronized
                     queueManager.playSong(nextSong)
                     playlistManager.playSong(nextSong)
                     playSong(nextSong)
-                    Log.d("MusicService", "Successfully started playing next song: ${nextSong.name}")
+                    Log.d("MusicService", "Successfully started playing next song: ${nextSong.title}")
                 } else {
                     // If repeat mode is NONE and we're at the end, try to get the next song manually
                     if (queueManager.getRepeatMode() == QueueManager.RepeatMode.NONE) {
@@ -690,11 +689,11 @@ class MusicService : MediaBrowserServiceCompat() {
                         
                         if (nextIndex < queue.size) {
                             val manualNextSong = queue[nextIndex]
-                            Log.d("MusicService", "Playing next song from search results (manual): ${manualNextSong.name}")
+                            Log.d("MusicService", "Playing next song from search results (manual): ${manualNextSong.title}")
                             queueManager.playSong(manualNextSong)
                             playlistManager.playSong(manualNextSong)
                             playSong(manualNextSong)
-                            Log.d("MusicService", "Successfully started playing next song: ${manualNextSong.name}")
+                            Log.d("MusicService", "Successfully started playing next song: ${manualNextSong.title}")
                         } else {
                             Log.d("MusicService", "Reached end of search results, stopping playback")
                             stopPlayback()

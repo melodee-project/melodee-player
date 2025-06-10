@@ -32,7 +32,7 @@ class ScrobbleManager(
     )
     
     fun startTracking(song: Song, duration: Long) {
-        Log.d(TAG, "Starting scrobble tracking for song: ${song.name} (${song.id})")
+        Log.d(TAG, "Starting scrobble tracking for song: ${song.title} (${song.id})")
         
         // Don't track songs that are too short
         if (duration < MIN_SONG_DURATION_MS) {
@@ -71,9 +71,9 @@ class ScrobbleManager(
                 }
                 
             } catch (e: CancellationException) {
-                Log.d(TAG, "Scrobble tracking cancelled for song: ${song.name}")
+                Log.d(TAG, "Scrobble tracking cancelled for song: ${song.title}")
             } catch (e: Exception) {
-                Log.e(TAG, "Error in scrobble tracking for song: ${song.name}", e)
+                Log.e(TAG, "Error in scrobble tracking for song: ${song.title}", e)
             }
         }
         
@@ -82,7 +82,7 @@ class ScrobbleManager(
     
     fun stopTracking(songId: String) {
         activeScrobbles[songId]?.let { tracker ->
-            Log.d(TAG, "Stopping scrobble tracking for song: ${tracker.song.name}")
+            Log.d(TAG, "Stopping scrobble tracking for song: ${tracker.song.title}")
             tracker.job?.cancel()
             activeScrobbles.remove(songId)
         }
@@ -111,7 +111,7 @@ class ScrobbleManager(
         if (tracker.nowPlayingScrobbled) return
         
         try {
-            Log.d(TAG, "Scrobbling 'nowPlaying' for song: ${tracker.song.name}")
+            Log.d(TAG, "Scrobbling 'nowPlaying' for song: ${tracker.song.title}")
             
             val request = ScrobbleRequest(
                 songId = tracker.song.id.toString(),
@@ -129,23 +129,23 @@ class ScrobbleManager(
             when (result) {
                 is ScrobbleResult.Success -> {
                     tracker.nowPlayingScrobbled = true
-                    Log.d(TAG, "Successfully scrobbled 'nowPlaying' for song: ${tracker.song.name}")
+                    Log.d(TAG, "Successfully scrobbled 'nowPlaying' for song: ${tracker.song.title}")
                     result.response.message?.let { message ->
                         Log.d(TAG, "Server message: $message")
                     }
                 }
                 is ScrobbleResult.Error -> {
-                    Log.e(TAG, "Failed to scrobble 'nowPlaying' for song: ${tracker.song.name}. " +
+                    Log.e(TAG, "Failed to scrobble 'nowPlaying' for song: ${tracker.song.title}. " +
                             "Status: ${result.httpStatus}, Title: ${result.errorResponse.title}, " +
                             "Type: ${result.errorResponse.type}, TraceId: ${result.errorResponse.traceId}")
                 }
                 is ScrobbleResult.NetworkError -> {
-                    Log.e(TAG, "Network error scrobbling 'nowPlaying' for song: ${tracker.song.name}", result.exception)
+                    Log.e(TAG, "Network error scrobbling 'nowPlaying' for song: ${tracker.song.title}", result.exception)
                 }
             }
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error scrobbling 'nowPlaying' for song: ${tracker.song.name}", e)
+            Log.e(TAG, "Error scrobbling 'nowPlaying' for song: ${tracker.song.title}", e)
         }
     }
     
@@ -153,7 +153,7 @@ class ScrobbleManager(
         if (tracker.playedScrobbled) return
         
         try {
-            Log.d(TAG, "Scrobbling 'played' for song: ${tracker.song.name}")
+            Log.d(TAG, "Scrobbling 'played' for song: ${tracker.song.title}")
             
             val playedDuration = System.currentTimeMillis() - tracker.startTime
             
@@ -174,23 +174,23 @@ class ScrobbleManager(
             when (result) {
                 is ScrobbleResult.Success -> {
                     tracker.playedScrobbled = true
-                    Log.d(TAG, "Successfully scrobbled 'played' for song: ${tracker.song.name}")
+                    Log.d(TAG, "Successfully scrobbled 'played' for song: ${tracker.song.title}")
                     result.response.message?.let { message ->
                         Log.d(TAG, "Server message: $message")
                     }
                 }
                 is ScrobbleResult.Error -> {
-                    Log.e(TAG, "Failed to scrobble 'played' for song: ${tracker.song.name}. " +
+                    Log.e(TAG, "Failed to scrobble 'played' for song: ${tracker.song.title}. " +
                             "Status: ${result.httpStatus}, Title: ${result.errorResponse.title}, " +
                             "Type: ${result.errorResponse.type}, TraceId: ${result.errorResponse.traceId}")
                 }
                 is ScrobbleResult.NetworkError -> {
-                    Log.e(TAG, "Network error scrobbling 'played' for song: ${tracker.song.name}", result.exception)
+                    Log.e(TAG, "Network error scrobbling 'played' for song: ${tracker.song.title}", result.exception)
                 }
             }
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error scrobbling 'played' for song: ${tracker.song.name}", e)
+            Log.e(TAG, "Error scrobbling 'played' for song: ${tracker.song.title}", e)
         }
     }
     

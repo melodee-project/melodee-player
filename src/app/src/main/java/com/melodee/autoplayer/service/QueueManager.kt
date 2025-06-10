@@ -55,7 +55,7 @@ class QueueManager {
             _currentSong.value = null
         }
         
-        Log.d("QueueManager", "Queue set: currentIndex=${_currentIndex.value}, currentSong=${_currentSong.value?.name}")
+        Log.d("QueueManager", "Queue set: currentIndex=${_currentIndex.value}, currentSong=${_currentSong.value?.title}")
     }
     
     fun addToQueue(song: Song) {
@@ -83,7 +83,7 @@ class QueueManager {
                 createShuffleOrder(_currentIndex.value)
             }
             
-            Log.d("QueueManager", "Added song to queue: ${song.name}")
+            Log.d("QueueManager", "Added song to queue: ${song.title}")
         }
         
         // Add to play history
@@ -239,10 +239,10 @@ class QueueManager {
             }
             
             addToHistory(song)
-            Log.d("QueueManager", "Playing song: ${song.name} at index $index")
+            Log.d("QueueManager", "Playing song: ${song.title} at index $index")
             true
         } else {
-            Log.w("QueueManager", "Song not found in queue: ${song.name}")
+            Log.w("QueueManager", "Song not found in queue: ${song.title}")
             false
         }
     }

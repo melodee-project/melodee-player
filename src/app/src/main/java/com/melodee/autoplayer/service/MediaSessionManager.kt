@@ -24,7 +24,7 @@ class MediaSessionManager(private val context: Context) {
     fun updateMetadata(song: Song?) {
         val metadata = MediaMetadataCompat.Builder().apply {
             song?.let {
-                putString(MediaMetadataCompat.METADATA_KEY_TITLE, it.name)
+                putString(MediaMetadataCompat.METADATA_KEY_TITLE, it.title)
                 putString(MediaMetadataCompat.METADATA_KEY_ARTIST, it.artist.name)
                 putString(MediaMetadataCompat.METADATA_KEY_ALBUM, it.album.name)
                 putLong(MediaMetadataCompat.METADATA_KEY_DURATION, it.durationMs.toLong())
