@@ -119,13 +119,23 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "onGetRoot called for package: $clientPackageName, uid: $clientUid")
         Log.d("MusicService", "Root hints: $rootHints")
         
-
+        // Check if the client is Android Auto
+        val isAndroidAuto = rootHints?.getBoolean("android.service.media.extra.RECENT") == true ||
+                          clientPackageName == "com.google.android.projection.gearhead" ||
+                          clientPackageName == "com.google.android.gms"
+        
+        Log.d("MusicService", "Is Android Auto client: $isAndroidAuto")
         
         // Allow all clients to browse the media library
         val rootExtras = Bundle().apply {
             putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
             putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
             putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+            // Add Android Auto specific extras
+            if (isAndroidAuto) {
+                putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
+                putInt("android.media.extras.CONTENT_STYLE_GROUP_TITLE_HINT", 1)
+            }
         }
         
         return BrowserRoot(MEDIA_ROOT_ID, rootExtras)
@@ -141,13 +151,14 @@ class MusicService : MediaBrowserServiceCompat() {
             MEDIA_ROOT_ID -> {
                 val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
                 
-                // Add browsable categories
+                // Add browsable categories with Android Auto optimized icons
                 mediaItems.add(
                     MediaBrowserCompat.MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(MEDIA_PLAYLISTS_ID)
                             .setTitle("Playlists")
                             .setSubtitle("Browse your playlists")
+                            .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_playlist_music}"))
                             .build(),
                         MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
                     )
@@ -159,6 +170,7 @@ class MusicService : MediaBrowserServiceCompat() {
                             .setMediaId(MEDIA_RECENT_ID)
                             .setTitle("Recently Played")
                             .setSubtitle("Your recent music")
+                            .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_history}"))
                             .build(),
                         MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
                     )
@@ -170,6 +182,7 @@ class MusicService : MediaBrowserServiceCompat() {
                             .setMediaId(MEDIA_FAVORITES_ID)
                             .setTitle("Favorites")
                             .setSubtitle("Your starred music")
+                            .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_star}"))
                             .build(),
                         MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
                     )
@@ -196,6 +209,34 @@ class MusicService : MediaBrowserServiceCompat() {
                 result.sendResult(mutableListOf())
             }
         }
+    }
+
+    override fun onSearch(
+        query: String,
+        extras: Bundle?,
+        result: Result<List<MediaBrowserCompat.MediaItem>>
+    ) {
+        Log.d("MusicService", "onSearch called with query: $query")
+        
+        // For now, return a subset of current playlist that matches the query
+        // In a real implementation, you'd search your music library
+        val searchResults = mutableListOf<MediaBrowserCompat.MediaItem>()
+        
+        if (query.isNotEmpty()) {
+            playlistManager.currentPlaylist.value
+                .filter { song ->
+                    song.title.contains(query, ignoreCase = true) ||
+                    song.artist.name.contains(query, ignoreCase = true) ||
+                    song.album.name.contains(query, ignoreCase = true)
+                }
+                .take(10) // Limit results for Android Auto
+                .forEach { song ->
+                    searchResults.add(createMediaItem(song))
+                }
+        }
+        
+        Log.d("MusicService", "Search returned ${searchResults.size} results")
+        result.sendResult(searchResults)
     }
 
     private fun createMediaItem(song: Song): MediaBrowserCompat.MediaItem {
@@ -346,7 +387,7 @@ class MusicService : MediaBrowserServiceCompat() {
 
         val playPauseAction = if (player?.isPlaying == true) {
             NotificationCompat.Action(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_pause_auto,
                 "Pause",
                 PendingIntent.getService(
                     this,
@@ -357,7 +398,7 @@ class MusicService : MediaBrowserServiceCompat() {
             )
         } else {
             NotificationCompat.Action(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_play_auto,
                 "Play",
                 PendingIntent.getService(
                     this,
@@ -372,10 +413,10 @@ class MusicService : MediaBrowserServiceCompat() {
             .setContentTitle(song?.title ?: "Melodee")
             .setContentText(song?.artist?.name ?: "Music Player")
             .setSubText(song?.album?.name)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_library_music)
             .setContentIntent(pendingIntent)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_skip_previous_auto,
                 "Previous",
                 PendingIntent.getService(
                     this,
@@ -386,7 +427,7 @@ class MusicService : MediaBrowserServiceCompat() {
             )
             .addAction(playPauseAction)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_skip_next_auto,
                 "Next",
                 PendingIntent.getService(
                     this,
@@ -919,4 +960,4 @@ class MusicService : MediaBrowserServiceCompat() {
         positionUpdateJob?.cancel()
         positionUpdateJob = null
     }
-} 
+}
