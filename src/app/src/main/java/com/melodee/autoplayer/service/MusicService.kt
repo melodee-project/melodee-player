@@ -89,6 +89,7 @@ class MusicService : MediaBrowserServiceCompat() {
         const val ACTION_SET_SEARCH_RESULTS = "com.melodee.autoplayer.ACTION_SET_SEARCH_RESULTS"
         const val ACTION_TOGGLE_SHUFFLE = "com.melodee.autoplayer.ACTION_TOGGLE_SHUFFLE"
         const val ACTION_TOGGLE_REPEAT = "com.melodee.autoplayer.ACTION_TOGGLE_REPEAT"
+        const val ACTION_TOGGLE_FAVORITE = "com.melodee.autoplayer.ACTION_TOGGLE_FAVORITE"
         const val EXTRA_SONG = "com.melodee.autoplayer.EXTRA_SONG"
         const val EXTRA_POSITION = "com.melodee.autoplayer.EXTRA_POSITION"
         const val EXTRA_PLAYLIST = "com.melodee.autoplayer.EXTRA_PLAYLIST"
@@ -783,6 +784,10 @@ class MusicService : MediaBrowserServiceCompat() {
                 queueManager.toggleRepeat()
                 updateMediaSessionPlaybackState()
             }
+            ACTION_TOGGLE_FAVORITE -> {
+                Log.d("MusicService", "Received toggle favorite command")
+                toggleCurrentSongFavorite()
+            }
         }
         return START_STICKY
     }
@@ -1131,10 +1136,36 @@ class MusicService : MediaBrowserServiceCompat() {
             QueueManager.RepeatMode.ALL -> PlaybackStateCompat.REPEAT_MODE_ALL
         }
 
-        val playbackState = PlaybackStateCompat.Builder()
+        val playbackStateBuilder = PlaybackStateCompat.Builder()
             .setState(state, player.currentPosition, 1.0f)
             .setActions(actions)
-            .build()
+
+        // Add favorite action for current song
+        currentSong?.let { song ->
+            val favoriteIcon = if (song.userStarred) {
+                android.R.drawable.btn_star_big_on
+            } else {
+                android.R.drawable.btn_star_big_off
+            }
+            
+            val favoriteText = if (song.userStarred) {
+                "Remove from Favorites"
+            } else {
+                "Add to Favorites"
+            }
+            
+            // Create custom action for favorite toggle
+            val favoriteAction = PlaybackStateCompat.CustomAction.Builder(
+                ACTION_TOGGLE_FAVORITE,
+                favoriteText,
+                favoriteIcon
+            ).build()
+            
+            playbackStateBuilder.addCustomAction(favoriteAction)
+            Log.d("MusicService", "Added favorite custom action - icon: $favoriteIcon, text: $favoriteText, starred: ${song.userStarred}")
+        }
+
+        val playbackState = playbackStateBuilder.build()
 
         mediaSession.setPlaybackState(playbackState)
         mediaSession.setShuffleMode(shuffleMode)
@@ -1261,72 +1292,18 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Skipping to next song, context: $currentPlaybackContext")
         
         when (currentPlaybackContext) {
-            PlaybackContext.PLAYLIST -> {
-                // For playlist context, check if there are more songs in the playlist
-                val nextSong = queueManager.getNextSong()
+            PlaybackContext.PLAYLIST, PlaybackContext.SEARCH -> {
+                // Use queue manager's skipToNext which handles index updates properly
+                val nextSong = queueManager.skipToNext()
                 if (nextSong != null) {
-                    Log.d("MusicService", "Playing next song from playlist: ${nextSong.title}")
-                    // Update both managers to keep them synchronized
-                    queueManager.playSong(nextSong)
+                    Log.d("MusicService", "Playing next song: ${nextSong.title}")
+                    // Update playlist manager to keep them synchronized
                     playlistManager.playSong(nextSong)
                     playSong(nextSong)
                     Log.d("MusicService", "Successfully started playing next song: ${nextSong.title}")
                 } else {
-                    // If repeat mode is NONE and we're at the end, try to get the next song manually
-                    if (queueManager.getRepeatMode() == QueueManager.RepeatMode.NONE) {
-                        val queue = queueManager.currentQueue.value
-                        val currentIndex = queueManager.currentIndex.value
-                        val nextIndex = currentIndex + 1
-                        
-                        if (nextIndex < queue.size) {
-                            val manualNextSong = queue[nextIndex]
-                            Log.d("MusicService", "Playing next song from playlist (manual): ${manualNextSong.title}")
-                            queueManager.playSong(manualNextSong)
-                            playlistManager.playSong(manualNextSong)
-                            playSong(manualNextSong)
-                            Log.d("MusicService", "Successfully started playing next song: ${manualNextSong.title}")
-                        } else {
-                            Log.d("MusicService", "Reached end of playlist, stopping playback")
-                            stopPlayback()
-                        }
-                    } else {
-                        Log.d("MusicService", "No more songs in playlist, stopping playback")
-                        stopPlayback()
-                    }
-                }
-            }
-            PlaybackContext.SEARCH -> {
-                // For search context, check if there are more songs from search results
-                val nextSong = queueManager.getNextSong()
-                if (nextSong != null) {
-                    Log.d("MusicService", "Playing next song from search results: ${nextSong.title}")
-                    // Update both managers to keep them synchronized
-                    queueManager.playSong(nextSong)
-                    playlistManager.playSong(nextSong)
-                    playSong(nextSong)
-                    Log.d("MusicService", "Successfully started playing next song: ${nextSong.title}")
-                } else {
-                    // If repeat mode is NONE and we're at the end, try to get the next song manually
-                    if (queueManager.getRepeatMode() == QueueManager.RepeatMode.NONE) {
-                        val queue = queueManager.currentQueue.value
-                        val currentIndex = queueManager.currentIndex.value
-                        val nextIndex = currentIndex + 1
-                        
-                        if (nextIndex < queue.size) {
-                            val manualNextSong = queue[nextIndex]
-                            Log.d("MusicService", "Playing next song from search results (manual): ${manualNextSong.title}")
-                            queueManager.playSong(manualNextSong)
-                            playlistManager.playSong(manualNextSong)
-                            playSong(manualNextSong)
-                            Log.d("MusicService", "Successfully started playing next song: ${manualNextSong.title}")
-                        } else {
-                            Log.d("MusicService", "Reached end of search results, stopping playback")
-                            stopPlayback()
-                        }
-                    } else {
-                        Log.d("MusicService", "No more songs in search results, stopping playback")
-                        stopPlayback()
-                    }
+                    Log.d("MusicService", "No next song available, stopping playback")
+                    stopPlayback()
                 }
             }
             PlaybackContext.SINGLE_SONG -> {
@@ -1339,12 +1316,15 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun skipToPrevious() {
         Log.d("MusicService", "Skipping to previous song")
-        val previousSong = queueManager.getPreviousSong()
+        
+        // Use queue manager's skipToPrevious which handles index updates properly
+        val previousSong = queueManager.skipToPrevious()
         if (previousSong != null) {
-            // Update both managers to keep them synchronized
-            queueManager.playSong(previousSong)
+            Log.d("MusicService", "Playing previous song: ${previousSong.title}")
+            // Update playlist manager to keep them synchronized
             playlistManager.playSong(previousSong)
             playSong(previousSong)
+            Log.d("MusicService", "Successfully started playing previous song: ${previousSong.title}")
         } else {
             Log.d("MusicService", "No previous song available")
         }
@@ -1631,6 +1611,19 @@ class MusicService : MediaBrowserServiceCompat() {
                         // When playing from search, set context to single song
                         currentPlaybackContext = PlaybackContext.SINGLE_SONG
                         fetchAndPlaySong(id)
+                    }
+                }
+            }
+
+            override fun onCustomAction(action: String?, extras: Bundle?) {
+                Log.d("MusicService", "MediaSession onCustomAction: $action")
+                when (action) {
+                    ACTION_TOGGLE_FAVORITE -> {
+                        Log.d("MusicService", "Custom action: toggle favorite")
+                        toggleCurrentSongFavorite()
+                    }
+                    else -> {
+                        Log.w("MusicService", "Unknown custom action: $action")
                     }
                 }
             }
@@ -2012,8 +2005,6 @@ class MusicService : MediaBrowserServiceCompat() {
         if (!isAuthenticatedState && hasNetworkToken && currentUser != null) {
             Log.w("MusicService", "Authentication state mismatch detected - attempting to restore")
             
-           
-            
             // Force re-check authentication in AuthenticationManager
             try {
                 // Re-initialize the AuthenticationManager state based on stored data
@@ -2221,5 +2212,42 @@ class MusicService : MediaBrowserServiceCompat() {
         
         // Also notify media browser that queue children changed
         notifyChildrenChanged(MEDIA_QUEUE_ID)
+    }
+
+    private fun toggleCurrentSongFavorite() {
+        val song = currentSong
+        if (song == null) {
+            Log.w("MusicService", "No current song to favorite")
+            return
+        }
+        
+        serviceScope.launch {
+            try {
+                Log.d("MusicService", "Toggling favorite for song: ${song.title}")
+                val newFavoriteStatus = !song.userStarred
+                
+                // Call the API to update favorite status
+                val musicApi = NetworkModule.getMusicApi()
+                val response = musicApi.favoriteSong(song.id.toString(), newFavoriteStatus)
+                
+                if (response.isSuccessful) {
+                    // Update the current song object with new favorite status
+                    currentSong = song.copy(userStarred = newFavoriteStatus)
+                    
+                    // Update MediaSession metadata and playback state to reflect new favorite status
+                    updateMediaSessionMetadata(currentSong!!)
+                    updateMediaSessionPlaybackState()
+                    
+                    val statusText = if (newFavoriteStatus) "favorited" else "unfavorited"
+                    Log.i("MusicService", "Successfully ${statusText} song: ${song.title}")
+                    
+                } else {
+                    Log.e("MusicService", "Failed to update favorite status for song: ${song.title}. Response code: ${response.code()}")
+                }
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Error toggling favorite for song: ${song.title}", e)
+            }
+        }
     }
 }
