@@ -34,12 +34,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Declare this as a music app for better voice recognition -->
+            <intent-filter>
+                <action android:name="android.intent.action.MUSIC_PLAYER" />
+            </intent-filter>
         </activity>
 
         <service
             android:name=".service.MusicService"
             android:enabled="true"
             android:exported="true"
+            android:label="Melodee"
             android:foregroundServiceType="mediaPlayback">
             <!-- Media browser service for Android Auto -->
             <intent-filter>
@@ -48,10 +53,15 @@
             <!-- Voice search support for Android Auto -->
             <intent-filter>
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- Additional Android Auto support -->
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+            <!-- Music player service identification -->
+            <intent-filter>
+                <action android:name="android.intent.action.MUSIC_PLAYER" />
             </intent-filter>
         </service>
 
@@ -64,5 +74,15 @@
         <meta-data
             android:name="com.google.android.gms.car.notification.SmallIcon"
             android:resource="@drawable/ic_library_music" />
+            
+        <!-- Voice recognition metadata for Android Auto -->
+        <meta-data
+            android:name="com.google.android.gms.car.APPLICATION_KEYWORDS"
+            android:value="melodee,music,player" />
+            
+        <!-- Media app category for better recognition -->
+        <meta-data
+            android:name="android.app.default_searchable"
+            android:value=".service.MusicService" />
     </application>
 </manifest> 

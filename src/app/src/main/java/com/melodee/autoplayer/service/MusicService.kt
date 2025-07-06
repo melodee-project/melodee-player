@@ -197,6 +197,11 @@ class MusicService : MediaBrowserServiceCompat() {
                 // Add more Android Auto specific styling hints
                 putInt("android.media.browse.CONTENT_STYLE_LIST_ITEM_HINT_VALUE", 1)
                 putInt("android.media.browse.CONTENT_STYLE_GRID_ITEM_HINT_VALUE", 2)
+                
+                // Add voice recognition metadata
+                putString("android.media.extras.MEDIA_TITLE", "Melodee")
+                putString("android.media.extras.MEDIA_DESCRIPTION", "Music Player")
+                putStringArray("android.media.extras.MEDIA_KEYWORDS", arrayOf("melodee", "music", "player"))
             }
         }
         
@@ -1391,7 +1396,7 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun setupMediaSession() {
         Log.d("MusicService", "Setting up MediaSession")
-        mediaSession = MediaSessionCompat(this, "MelodeeMediaSession")
+        mediaSession = MediaSessionCompat(this, "Melodee")
         Log.d("MusicService", "MediaSession created: ${mediaSession?.sessionToken}")
         
         // Set flags for Android Auto compatibility
@@ -1460,7 +1465,12 @@ class MusicService : MediaBrowserServiceCompat() {
             }
 
             override fun onPlayFromSearch(query: String?, extras: Bundle?) {
-                Log.d("MusicService", "MediaSession onPlayFromSearch: $query")
+                Log.i("MusicService", "=== ANDROID AUTO VOICE COMMAND RECEIVED ===")
+                Log.i("MusicService", "Voice search query: '$query'")
+                Log.i("MusicService", "Extras: $extras")
+                Log.i("MusicService", "MediaSession active: ${mediaSession?.isActive}")
+                Log.i("MusicService", "App recognized by Android Auto for voice command!")
+                
                 // Clear browsing playlist context when playing from search
                 currentBrowsingPlaylistId = null
                 currentBrowsingPlaylistSongs = emptyList()
@@ -1650,7 +1660,13 @@ class MusicService : MediaBrowserServiceCompat() {
             .build()
             
         mediaSession?.setPlaybackState(initialPlaybackState)
-        mediaSession?.setMetadata(MediaMetadataCompat.Builder().build())
+        
+        // Set initial metadata with app information for better voice recognition
+        val appMetadata = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "Melodee")
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "Music Player")
+            .build()
+        mediaSession?.setMetadata(appMetadata)
         mediaSession?.isActive = true
         
         // Set the session token for MediaBrowserServiceCompat
