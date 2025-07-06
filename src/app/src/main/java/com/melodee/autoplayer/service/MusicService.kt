@@ -63,6 +63,8 @@ class MusicService : MediaBrowserServiceCompat() {
     private var currentPlaybackContext = PlaybackContext.SINGLE_SONG
     private var currentBrowsingPlaylistId: String? = null  // Track which playlist is currently being browsed
     private var currentBrowsingPlaylistSongs: List<Song> = emptyList()  // Cache songs from the browsed playlist
+    private var searchResultsCache: List<Song> = emptyList()  // Cache search results for Android Auto playback
+    private var searchResultsCacheTime: Long = 0  // Track when search results were cached
 
     companion object {
         private const val NOTIFICATION_ID = 1
@@ -212,6 +214,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 // Clear browsing playlist context when returning to root
                 currentBrowsingPlaylistId = null
                 currentBrowsingPlaylistSongs = emptyList()
+                // Keep search results cache as user might still want to play from search
                 loadRootItems(result)
             }
             
@@ -219,6 +222,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 // Clear browsing playlist context when browsing playlists list
                 currentBrowsingPlaylistId = null
                 currentBrowsingPlaylistSongs = emptyList()
+                // Clear search cache when browsing playlists
+                searchResultsCache = emptyList()
                 loadPlaylists(result)
             }
             
@@ -226,6 +231,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 // Clear browsing playlist context when browsing queue
                 currentBrowsingPlaylistId = null
                 currentBrowsingPlaylistSongs = emptyList()
+                // Clear search cache when browsing queue
+                searchResultsCache = emptyList()
                 loadCurrentQueue(result)
             }
             
@@ -624,8 +631,13 @@ class MusicService : MediaBrowserServiceCompat() {
                 if (searchResponse.data.isNotEmpty()) {
                     Log.i("MusicService", "API search found ${searchResponse.data.size} songs for '$query'")
                     
+                    // Cache the search results for Android Auto playback
+                    searchResultsCache = searchResponse.data
+                    searchResultsCacheTime = System.currentTimeMillis()
+                    Log.d("MusicService", "Cached ${searchResultsCache.size} search results at ${searchResultsCacheTime}")
+                    
                     searchResponse.data.forEach { song ->
-                        searchResults.add(createMediaItem(song))
+                        searchResults.add(createMediaItem(song, fromSearch = true))
                         Log.d("MusicService", "Added song: ${song.title} by ${song.artist.name}")
                     }
                 } else {
@@ -655,7 +667,7 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun createMediaItem(song: Song, playlistId: String? = null): MediaBrowserCompat.MediaItem {
+    private fun createMediaItem(song: Song, playlistId: String? = null, fromSearch: Boolean = false): MediaBrowserCompat.MediaItem {
         val builder = MediaDescriptionCompat.Builder()
             .setMediaId(song.id.toString())
             .setTitle(song.title)
@@ -663,11 +675,16 @@ class MusicService : MediaBrowserServiceCompat() {
             .setDescription(song.album.name)
             .setIconUri(android.net.Uri.parse(song.thumbnailUrl))
         
-        // Add playlist context if provided
+        // Add context extras
+        val extras = Bundle()
         if (playlistId != null) {
-            val extras = Bundle().apply {
-                putString("from_playlist", playlistId)
-            }
+            extras.putString("from_playlist", playlistId)
+        }
+        if (fromSearch) {
+            extras.putBoolean("from_search", true)
+        }
+        
+        if (playlistId != null || fromSearch) {
             builder.setExtras(extras)
         }
         
@@ -691,6 +708,10 @@ class MusicService : MediaBrowserServiceCompat() {
                     }
                     queueManager.addToQueue(song)
                     playlistManager.playSong(song)
+                    
+                    // Notify Android Auto that the queue has changed
+                    notifyQueueChanged()
+                    
                     playSong(song)
                 } else {
                     Log.e("MusicService", "Received null song in intent")
@@ -703,6 +724,10 @@ class MusicService : MediaBrowserServiceCompat() {
                     currentPlaybackContext = PlaybackContext.PLAYLIST
                     queueManager.setQueue(songs, startIndex)
                     playlistManager.setPlaylist(songs, startIndex)
+                    
+                    // Notify Android Auto that the queue has changed
+                    notifyQueueChanged()
+                    
                     if (songs.isNotEmpty() && startIndex < songs.size) {
                         playSong(songs[startIndex])
                     }
@@ -715,6 +740,10 @@ class MusicService : MediaBrowserServiceCompat() {
                     currentPlaybackContext = PlaybackContext.SEARCH
                     queueManager.setQueue(songs, startIndex)
                     playlistManager.setPlaylist(songs, startIndex)
+                    
+                    // Notify Android Auto that the queue has changed
+                    notifyQueueChanged()
+                    
                     if (songs.isNotEmpty() && startIndex < songs.size) {
                         playSong(songs[startIndex])
                     }
@@ -1171,6 +1200,10 @@ class MusicService : MediaBrowserServiceCompat() {
             currentPlaybackContext = PlaybackContext.PLAYLIST
             queueManager.setQueue(currentBrowsingPlaylistSongs, 0)
             playlistManager.setPlaylist(currentBrowsingPlaylistSongs, 0)
+            
+            // Notify Android Auto that the queue has changed
+            notifyQueueChanged()
+            
             playSong(firstSong)
             return
         }
@@ -1193,6 +1226,9 @@ class MusicService : MediaBrowserServiceCompat() {
             val firstSong = playlistSongs.first()
             currentPlaybackContext = PlaybackContext.PLAYLIST
             queueManager.setQueue(playlistSongs, 0)
+            
+            // Notify Android Auto that the queue has changed
+            notifyQueueChanged()
             playSong(firstSong)
             return
         }
@@ -1448,21 +1484,57 @@ class MusicService : MediaBrowserServiceCompat() {
                 // Clear browsing playlist context when playing from search
                 currentBrowsingPlaylistId = null
                 currentBrowsingPlaylistSongs = emptyList()
+                // Clear any old search cache
+                searchResultsCache = emptyList()
+                
+                if (query.isNullOrBlank()) {
+                    Log.d("MusicService", "Empty search query, resuming current playback")
+                    resumePlayback()
+                    return
+                }
+                
                 // Handle voice commands like "play next song"
                 when {
-                    query?.contains("next", ignoreCase = true) == true -> {
+                    query.contains("next", ignoreCase = true) -> {
                         skipToNext()
                     }
-                    query?.contains("previous", ignoreCase = true) == true -> {
+                    query.contains("previous", ignoreCase = true) -> {
                         skipToPrevious()
                     }
-                    query?.contains("shuffle", ignoreCase = true) == true -> {
+                    query.contains("shuffle", ignoreCase = true) -> {
                         queueManager.toggleShuffle()
                         updateMediaSessionPlaybackState()
                     }
                     else -> {
-                        // For now, just resume playback for other voice commands
-                        resumePlayback()
+                        // Perform actual search and play first result for Android Auto
+                        Log.i("MusicService", "Android Auto voice search request: '$query'")
+                        serviceScope.launch {
+                            try {
+                                val searchResults = performApiSearch(query)
+                                if (searchResults.isNotEmpty()) {
+                                    // Find the first playable song in search results
+                                    val firstSong = searchResults.find { item ->
+                                        val mediaId = item.mediaId
+                                        mediaId != null && !mediaId.startsWith("no_") && !mediaId.startsWith("auth_") && !mediaId.startsWith("search_")
+                                    }
+                                    firstSong?.let { mediaItem ->
+                                        Log.i("MusicService", "Playing first search result: ${mediaItem.description.title}")
+                                        // Set context to single song so it stops after playing
+                                        currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                                        // Fetch and play the song
+                                        mediaItem.mediaId?.let { mediaId ->
+                                            fetchAndPlaySong(mediaId)
+                                        }
+                                    } ?: run {
+                                        Log.w("MusicService", "No playable songs found in search results")
+                                    }
+                                } else {
+                                    Log.w("MusicService", "Search returned no results for: '$query'")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("MusicService", "Failed to search and play for query: '$query'", e)
+                            }
+                        }
                     }
                 }
             }
@@ -1485,38 +1557,79 @@ class MusicService : MediaBrowserServiceCompat() {
                         return@let
                     }
                     
+                    // Handle queue item selection (e.g., "queue_0", "queue_1")
+                    if (id.startsWith("queue_")) {
+                        val queueIndexStr = id.removePrefix("queue_")
+                        val queueIndex = queueIndexStr.toIntOrNull()
+                        if (queueIndex != null) {
+                            val currentQueueSongs = queueManager.currentQueue.value
+                            if (queueIndex >= 0 && queueIndex < currentQueueSongs.size) {
+                                val songToPlay = currentQueueSongs[queueIndex]
+                                Log.i("MusicService", "Playing song from queue at index $queueIndex: ${songToPlay.title}")
+                                
+                                // Update queue manager to the selected index
+                                queueManager.playAtIndex(queueIndex)
+                                playSong(songToPlay)
+                                return@let
+                            } else {
+                                Log.w("MusicService", "Queue index $queueIndex out of bounds (queue size: ${currentQueueSongs.size})")
+                                return@let
+                            }
+                        } else {
+                            Log.w("MusicService", "Invalid queue index: $queueIndexStr")
+                            return@let
+                        }
+                    }
+                    
                     Log.d("MusicService", "Searching for song with ID: $id")
                     
                     // First try to find the song in current browsing content
                     val queueSongs = queueManager.currentQueue.value
                     val playlistSongs = playlistManager.currentPlaylist.value
                     val browsingPlaylistSongs = currentBrowsingPlaylistSongs
-                    val allSongs = (queueSongs + playlistSongs + browsingPlaylistSongs).distinctBy { it.id }
+                    val searchSongs = searchResultsCache
+                    val allSongs = (queueSongs + playlistSongs + browsingPlaylistSongs + searchSongs).distinctBy { it.id }
                     
                     Log.d("MusicService", "Total searchable songs: ${allSongs.size}")
                     Log.d("MusicService", "Song IDs available: ${allSongs.map { it.id.toString() }}")
+                    Log.d("MusicService", "Search cache size: ${searchResultsCache.size}")
                     
                     val song = allSongs.find { it.id.toString() == id }
                     if (song != null) {
                         Log.i("MusicService", "Found song: ${song.title} by ${song.artist.name}")
                         Log.i("MusicService", "Song stream URL: ${song.streamUrl}")
                         
+                        // Check if this song is from search results
+                        val isFromSearchCache = searchResultsCache.any { it.id.toString() == id }
+                        
                         // Check if we're browsing a playlist context
-                        if (currentBrowsingPlaylistId != null) {
+                        if (currentBrowsingPlaylistId != null && !isFromSearchCache) {
                             Log.i("MusicService", "Playing song from playlist context: $currentBrowsingPlaylistId")
                             currentPlaybackContext = PlaybackContext.PLAYLIST
                             // Load the entire playlist if needed
                             loadPlaylistAndPlay(currentBrowsingPlaylistId!!, song)
                         } else {
-                            Log.i("MusicService", "Playing song as individual track")
-                            queueManager.addToQueue(song)
-                            playlistManager.playSong(song)
-                            playSong(song)
+                            // Check if this song came from a search result
+                            val isFromSearch = extras?.getBoolean("from_search", false) == true || isFromSearchCache
+                            if (isFromSearch) {
+                                Log.i("MusicService", "Playing song from search results as single song")
+                                currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                                // Play just this song, don't add to queue
+                                playSong(song)
+                            } else {
+                                Log.i("MusicService", "Playing song as individual track")
+                                currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                                queueManager.addToQueue(song)
+                                playlistManager.playSong(song)
+                                playSong(song)
+                            }
                         }
                     } else {
                         Log.w("MusicService", "Song with mediaId $id not found in local content")
                         Log.w("MusicService", "Available song IDs: ${allSongs.map { "${it.id} (${it.title})" }}")
                         // Try to fetch and play the song from API (for search results or new playlists)
+                        // When playing from search, set context to single song
+                        currentPlaybackContext = PlaybackContext.SINGLE_SONG
                         fetchAndPlaySong(id)
                     }
                 }
@@ -1574,6 +1687,10 @@ class MusicService : MediaBrowserServiceCompat() {
                         currentPlaybackContext = PlaybackContext.PLAYLIST
                         queueManager.setQueue(playlistSongs, startIndex)
                         playlistManager.setPlaylist(playlistSongs, startIndex)
+                        
+                        // Notify Android Auto that the queue has changed
+                        notifyQueueChanged()
+                        
                         playSong(songToPlay)
                         
                         Log.i("MusicService", "Successfully loaded playlist and started playback")
@@ -1581,6 +1698,10 @@ class MusicService : MediaBrowserServiceCompat() {
                         Log.w("MusicService", "Song not found in playlist, playing as standalone")
                         queueManager.addToQueue(songToPlay)
                         playlistManager.playSong(songToPlay)
+                        
+                        // Notify Android Auto that the queue has changed
+                        notifyQueueChanged()
+                        
                         playSong(songToPlay)
                     }
                 } else {
@@ -1588,6 +1709,10 @@ class MusicService : MediaBrowserServiceCompat() {
                     // Just play the single song
                     queueManager.addToQueue(songToPlay)
                     playlistManager.playSong(songToPlay)
+                    
+                    // Notify Android Auto that the queue has changed (even for single songs)
+                    notifyQueueChanged()
+                    
                     playSong(songToPlay)
                 }
             } catch (e: Exception) {
@@ -1599,6 +1724,10 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.i("MusicService", "Falling back to standalone song playback")
                 queueManager.addToQueue(songToPlay)
                 playlistManager.playSong(songToPlay)
+                
+                // Notify Android Auto that the queue has changed
+                notifyQueueChanged()
+                
                 playSong(songToPlay)
             }
         }
@@ -1608,9 +1737,40 @@ class MusicService : MediaBrowserServiceCompat() {
         serviceScope.launch {
             try {
                 Log.d("MusicService", "Attempting to fetch and play song: $songId")
-                // For now, we'll just log this - in a full implementation, 
-                // you might want to have a getSongById API endpoint
-                Log.w("MusicService", "Cannot play song $songId - not found in local content and no getSongById API")
+                
+                // First, try to find the song in recent search results
+                // This is a common case for Android Auto where search results are cached
+                Log.d("MusicService", "Searching for song in all available collections...")
+                
+                // Check all possible sources again
+                val allAvailableSongs = mutableListOf<Song>()
+                allAvailableSongs.addAll(queueManager.currentQueue.value)
+                allAvailableSongs.addAll(playlistManager.currentPlaylist.value)
+                allAvailableSongs.addAll(currentBrowsingPlaylistSongs)
+                allAvailableSongs.addAll(searchResultsCache)  // Include cached search results
+                
+                val song = allAvailableSongs.find { it.id.toString() == songId }
+                if (song != null) {
+                    Log.i("MusicService", "Found song in available collections: ${song.title}")
+                    // Play as single song based on current context
+                    if (currentPlaybackContext == PlaybackContext.SINGLE_SONG) {
+                        Log.i("MusicService", "Playing as single song - will stop after completion")
+                        playSong(song)
+                    } else {
+                        queueManager.addToQueue(song)
+                        playlistManager.playSong(song)
+                        
+                        // Notify Android Auto that the queue has changed
+                        notifyQueueChanged()
+                        
+                        playSong(song)
+                    }
+                } else {
+                    Log.w("MusicService", "Cannot play song $songId - not found in any local content")
+                    Log.w("MusicService", "Available songs: ${allAvailableSongs.map { "${it.id} (${it.title})" }}")
+                    Log.w("MusicService", "Cached search results: ${searchResultsCache.map { "${it.id} (${it.title})" }}")
+                    // In a production app, you might fetch the song details from an API here
+                }
             } catch (e: Exception) {
                 Log.e("MusicService", "Failed to fetch and play song $songId", e)
             }
@@ -1852,6 +2012,8 @@ class MusicService : MediaBrowserServiceCompat() {
         if (!isAuthenticatedState && hasNetworkToken && currentUser != null) {
             Log.w("MusicService", "Authentication state mismatch detected - attempting to restore")
             
+           
+            
             // Force re-check authentication in AuthenticationManager
             try {
                 // Re-initialize the AuthenticationManager state based on stored data
@@ -1942,7 +2104,12 @@ class MusicService : MediaBrowserServiceCompat() {
                 .setAudioAttributes(audioAttributes)
                 .setAcceptsDelayedFocusGain(true)
                 .setWillPauseWhenDucked(false)
-                .setForceDucking(false) // Don't allow other apps to duck us
+                .apply {
+                    // setForceDucking requires API 28, so add version check
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        setForceDucking(false) // Don't allow other apps to duck us
+                    }
+                }
                 .setOnAudioFocusChangeListener(audioFocusChangeListener)
                 .build()
 
@@ -1998,5 +2165,61 @@ class MusicService : MediaBrowserServiceCompat() {
         val finalResult = requestAudioFocus()
         Log.i("MusicService", "Final aggressive audio focus result: $finalResult")
         return finalResult
+    }
+
+    private fun clearExpiredSearchCache() {
+        val cacheExpirationMs = 10 * 60 * 1000L // 10 minutes
+        val currentTime = System.currentTimeMillis()
+        
+        if (searchResultsCache.isNotEmpty() && (currentTime - searchResultsCacheTime) > cacheExpirationMs) {
+            Log.d("MusicService", "Search cache expired, clearing it")
+            searchResultsCache = emptyList()
+            searchResultsCacheTime = 0
+        }
+    }
+    
+    private fun clearSearchCache() {
+        Log.d("MusicService", "Manually clearing search cache")
+        searchResultsCache = emptyList()
+        searchResultsCacheTime = 0
+    }
+
+    private fun notifyQueueChanged() {
+        // Notify Android Auto that the Current Queue content has changed
+        Log.d("MusicService", "Notifying Android Auto that queue has changed")
+        
+        // Update MediaSessionCompat queue for Android Auto
+        val currentQueueSongs = queueManager.currentQueue.value
+        if (currentQueueSongs.isNotEmpty()) {
+            val sessionQueue = currentQueueSongs.mapIndexed { index, song ->
+                MediaSessionCompat.QueueItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId("queue_$index")
+                        .setTitle(song.title)
+                        .setSubtitle(song.artist.name)
+                        .setDescription(song.album.name)
+                        .build(),
+                    index.toLong()
+                )
+            }
+            
+            Log.d("MusicService", "Setting MediaSession queue with ${sessionQueue.size} items")
+            mediaSession?.setQueue(sessionQueue)
+            
+            // Set queue title based on playback context
+            val queueTitle = when (currentPlaybackContext) {
+                PlaybackContext.PLAYLIST -> "Playlist Queue"
+                PlaybackContext.SEARCH -> "Search Results"
+                PlaybackContext.SINGLE_SONG -> "Now Playing"
+            }
+            mediaSession?.setQueueTitle(queueTitle)
+        } else {
+            Log.d("MusicService", "Clearing MediaSession queue (empty)")
+            mediaSession?.setQueue(emptyList())
+            mediaSession?.setQueueTitle(null)
+        }
+        
+        // Also notify media browser that queue children changed
+        notifyChildrenChanged(MEDIA_QUEUE_ID)
     }
 }

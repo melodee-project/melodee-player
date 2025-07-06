@@ -373,6 +373,30 @@ class QueueManager {
         _playHistory.value = history
     }
     
+    fun playAtIndex(index: Int) {
+        val queue = _currentQueue.value
+        if (index >= 0 && index < queue.size) {
+            _currentIndex.value = index
+            _currentSong.value = queue[index]
+            
+            // Update shuffle position if needed
+            if (_isShuffleEnabled.value && shuffledIndices.isNotEmpty()) {
+                currentShuffleIndex = shuffledIndices.indexOf(index)
+                if (currentShuffleIndex == -1) {
+                    // If the index is not in shuffle order, recreate shuffle starting from this index
+                    createShuffleOrder(index)
+                }
+            }
+            
+            // Add to play history
+            addToHistory(queue[index])
+            
+            Log.d("QueueManager", "Playing song at index $index: ${queue[index].title}")
+        } else {
+            Log.w("QueueManager", "Invalid index $index for queue of size ${queue.size}")
+        }
+    }
+    
     fun clearQueue() {
         _originalQueue.value = emptyList()
         _currentQueue.value = emptyList()
