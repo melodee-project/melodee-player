@@ -24,6 +24,14 @@ class SettingsManager(context: Context) {
         get() = prefs.getString(KEY_USER_NAME, "") ?: ""
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
+    var userThumbnailUrl: String
+        get() = prefs.getString(KEY_USER_THUMBNAIL_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_USER_THUMBNAIL_URL, value).apply()
+
+    var userImageUrl: String
+        get() = prefs.getString(KEY_USER_IMAGE_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_USER_IMAGE_URL, value).apply()
+
     var authToken: String
         get() {
             val token = prefs.getString(KEY_AUTH_TOKEN, "") ?: ""
@@ -55,7 +63,9 @@ class SettingsManager(context: Context) {
         userId: String,
         userEmail: String,
         username: String,
-        serverUrl: String
+        serverUrl: String,
+        thumbnailUrl: String = "",
+        imageUrl: String = ""
     ) {
         Log.i("SettingsManager", "=== SAVING AUTHENTICATION DATA ===")
         Log.i("SettingsManager", "Token: ${if (token.isNotEmpty()) "${token.take(20)}..." else "empty"}")
@@ -63,6 +73,8 @@ class SettingsManager(context: Context) {
         Log.i("SettingsManager", "Username: $username")
         Log.i("SettingsManager", "Email: $userEmail")
         Log.i("SettingsManager", "Server URL: $serverUrl")
+        Log.i("SettingsManager", "Thumbnail URL: $thumbnailUrl")
+        Log.i("SettingsManager", "Image URL: $imageUrl")
         
         val editor = prefs.edit()
         editor.putString(KEY_AUTH_TOKEN, token)
@@ -70,6 +82,8 @@ class SettingsManager(context: Context) {
         editor.putString(KEY_USER_EMAIL, userEmail)
         editor.putString(KEY_USER_NAME, username)
         editor.putString(KEY_SERVER_URL, serverUrl)
+        editor.putString(KEY_USER_THUMBNAIL_URL, thumbnailUrl)
+        editor.putString(KEY_USER_IMAGE_URL, imageUrl)
         val success = editor.commit() // Use commit() instead of apply() for synchronous save
         
         Log.i("SettingsManager", "Authentication data saved successfully: $success")
@@ -89,6 +103,8 @@ class SettingsManager(context: Context) {
             .remove(KEY_USER_ID)
             .remove(KEY_USER_EMAIL)
             .remove(KEY_USER_NAME)
+            .remove(KEY_USER_THUMBNAIL_URL)
+            .remove(KEY_USER_IMAGE_URL)
             .remove(KEY_AUTH_TOKEN)
             .apply()
     }
@@ -99,6 +115,8 @@ class SettingsManager(context: Context) {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_USER_THUMBNAIL_URL = "user_thumbnail_url"
+        private const val KEY_USER_IMAGE_URL = "user_image_url"
         private const val KEY_AUTH_TOKEN = "auth_token"
     }
 }

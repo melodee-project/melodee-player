@@ -57,10 +57,12 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         _isLoading.value = false
                     }
                     ?.collect { response ->
-                        // Store user information in settings
+                        // Store user information in settings including avatar URLs
                         settingsManager.userId = response.user.id.toString()
                         settingsManager.userEmail = response.user.email
                         settingsManager.username = response.user.username
+                        settingsManager.userThumbnailUrl = response.user.thumbnailUrl
+                        settingsManager.userImageUrl = response.user.imageUrl
                         settingsManager.authToken = response.token
                         
                         _loginState.value = LoginState.Success(response)

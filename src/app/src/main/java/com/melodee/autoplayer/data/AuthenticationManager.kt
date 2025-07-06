@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 class AuthenticationManager(private val context: Context) {
     private val settingsManager = SettingsManager(context)
     
-    // Authentication state
-    private val _isAuthenticated = MutableStateFlow(false)
+    // Authentication state - initialize with stored authentication state to avoid race conditions
+    private val _isAuthenticated = MutableStateFlow(settingsManager.isAuthenticated())
     val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
     
     private val _authenticationError = MutableStateFlow<String?>(null)
@@ -90,12 +90,14 @@ class AuthenticationManager(private val context: Context) {
         userId: String,
         userEmail: String,
         username: String,
-        serverUrl: String
+        serverUrl: String,
+        thumbnailUrl: String = "",
+        imageUrl: String = ""
     ) {
         Log.d("AuthenticationManager", "Saving authentication for user: $username")
         
         // Save to persistent storage
-        settingsManager.saveAuthenticationData(token, userId, userEmail, username, serverUrl)
+        settingsManager.saveAuthenticationData(token, userId, userEmail, username, serverUrl, thumbnailUrl, imageUrl)
         
         // Update NetworkModule
         NetworkModule.setBaseUrl(serverUrl)
@@ -160,7 +162,9 @@ class AuthenticationManager(private val context: Context) {
                 userId = settingsManager.userId,
                 username = settingsManager.username,
                 email = settingsManager.userEmail,
-                serverUrl = settingsManager.serverUrl
+                serverUrl = settingsManager.serverUrl,
+                thumbnailUrl = settingsManager.userThumbnailUrl,
+                imageUrl = settingsManager.userImageUrl
             )
         } else {
             null
@@ -171,7 +175,9 @@ class AuthenticationManager(private val context: Context) {
         val userId: String,
         val username: String,
         val email: String,
-        val serverUrl: String
+        val serverUrl: String,
+        val thumbnailUrl: String = "",
+        val imageUrl: String = ""
     )
     
     // Method to manually restore authentication state from stored data

@@ -35,6 +35,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.melodee.autoplayer.MelodeeApplication
 import com.melodee.autoplayer.domain.model.AuthResponse
 import com.melodee.autoplayer.presentation.ui.about.AboutScreen
 import com.melodee.autoplayer.presentation.ui.home.HomeScreen
@@ -224,6 +225,66 @@ fun MainScreen(
     val navController = rememberNavController()
     val themeState = rememberThemeState(themeManager)
     
+    // Get authentication manager and state
+    val authenticationManager = remember {
+        (context.applicationContext as MelodeeApplication).authenticationManager
+    }
+    val isAuthenticated by authenticationManager.isAuthenticated.collectAsStateWithLifecycle()
+    
+    // Handle navigation based on authentication state changes
+    LaunchedEffect(isAuthenticated) {
+        val currentRoute = navController.currentDestination?.route
+        
+        if (isAuthenticated && currentRoute == "login") {
+            Log.d("MainActivity", "User became authenticated, navigating to home")
+            navController.navigate("home") {
+                popUpTo("login") { inclusive = true }
+            }
+        } else if (!isAuthenticated && currentRoute != "login") {
+            Log.d("MainActivity", "User became unauthenticated, navigating to login")
+            navController.navigate("login") {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+    
+    // Determine start destination based on authentication state
+    val startDestination = if (isAuthenticated) {
+        Log.d("MainActivity", "User is authenticated, starting with home screen")
+        "home"
+    } else {
+        Log.d("MainActivity", "User not authenticated, starting with login screen") 
+        "login"
+    }
+    
+    // Set up ViewModels when user is authenticated
+    LaunchedEffect(isAuthenticated) {
+        if (isAuthenticated) {
+            val currentUser = authenticationManager.getCurrentUser()
+            if (currentUser != null) {
+                Log.d("MainActivity", "Setting up ViewModels for authenticated user: ${currentUser.username}")
+                
+                // Set base URL for both view models
+                homeViewModel.setBaseUrl(currentUser.serverUrl)
+                playlistViewModel.setBaseUrl(currentUser.serverUrl)
+                
+                // Create User object for HomeViewModel
+                val user = com.melodee.autoplayer.domain.model.User(
+                    id = java.util.UUID.fromString(currentUser.userId.ifEmpty { "00000000-0000-0000-0000-000000000000" }),
+                    username = currentUser.username,
+                    email = currentUser.email,
+                    thumbnailUrl = currentUser.thumbnailUrl,
+                    imageUrl = currentUser.imageUrl
+                )
+                
+                // Set user data (this will automatically load playlists)
+                homeViewModel.setUser(user)
+                
+                Log.d("MainActivity", "ViewModels configured for authenticated user")
+            }
+        }
+    }
+    
     // Get current route to conditionally show icons
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -411,7 +472,7 @@ fun MainScreen(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = "login",
+            startDestination = startDestination,
             modifier = Modifier.padding(paddingValues)
         ) {
             composable("login") {
@@ -474,4 +535,4 @@ fun MainScreen(
             }
         }
     }
-} 
+}
