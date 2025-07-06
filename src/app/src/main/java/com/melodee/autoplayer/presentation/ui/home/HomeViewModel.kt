@@ -612,6 +612,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun clearQueue() {
+        Log.d("HomeViewModel", "Clearing queue")
+        context?.let { ctx ->
+            val intent = Intent(ctx, MusicService::class.java).apply {
+                action = MusicService.ACTION_CLEAR_QUEUE
+            }
+            ctx.startService(intent)
+        }
+        
+        // Clear local playback state
+        _currentSongIndex.value = -1
+        _isPlaying.value = false
+        _playbackProgress.value = 0f
+        _currentPosition.value = 0L
+        _currentDuration.value = 0L
+        
+        // Stop progress updates
+        stopProgressUpdates()
+        
+        Log.d("HomeViewModel", "Queue cleared")
+    }
+
     fun refreshPlaylists() {
         // Reset pagination and reload playlists from the beginning
         currentPage = 1
@@ -619,4 +641,4 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _playlists.value = emptyList()
         loadPlaylists()
     }
-} 
+}

@@ -73,9 +73,8 @@ fun HomeScreen(
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 super.onPlaybackStateChanged(state)
-                state?.let {
-                    viewModel.togglePlayPause()
-                }
+                // Do not automatically toggle playback on state changes
+                // This prevents unwanted playback resume during search operations
             }
 
             override fun onMetadataChanged(metadata: MediaMetadata?) {
@@ -155,9 +154,8 @@ fun HomeScreen(
             mediaController?.registerCallback(object : MediaController.Callback() {
                 override fun onPlaybackStateChanged(state: PlaybackState?) {
                     super.onPlaybackStateChanged(state)
-                    state?.let {
-                        viewModel.togglePlayPause()
-                    }
+                    // Do not automatically toggle playback on state changes
+                    // This prevents unwanted playback resume during search operations
                 }
 
                 override fun onMetadataChanged(metadata: MediaMetadata?) {
@@ -178,6 +176,15 @@ fun HomeScreen(
                         text = "Home",
                         style = MaterialTheme.typography.titleLarge
                     )
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.clearQueue() }) {
+                        Icon(
+                            Icons.Filled.Clear,
+                            contentDescription = "Clear Queue",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             )
         }

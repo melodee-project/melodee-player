@@ -79,7 +79,8 @@ fun NowPlayingScreen(
         onSeekTo = { progress -> viewModel.seekTo((progress * currentDuration).toLong()) },
         onQueueToggle = { showQueue = !showQueue },
         onQueueItemClick = { song -> viewModel.playSong(song) },
-        onQueueItemRemove = { index -> viewModel.removeFromQueue(index) }
+        onQueueItemRemove = { index -> viewModel.removeFromQueue(index) },
+        onClearQueue = { viewModel.clearQueue() }
     )
 }
 
@@ -105,7 +106,8 @@ private fun MobileNowPlayingLayout(
     onSeekTo: (Float) -> Unit,
     onQueueToggle: () -> Unit,
     onQueueItemClick: (Song) -> Unit,
-    onQueueItemRemove: (Int) -> Unit
+    onQueueItemRemove: (Int) -> Unit,
+    onClearQueue: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -139,6 +141,7 @@ private fun MobileNowPlayingLayout(
                 currentIndex = currentIndex,
                 onItemClick = onQueueItemClick,
                 onItemRemove = onQueueItemRemove,
+                onClearQueue = onClearQueue,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -464,6 +467,7 @@ private fun QueueView(
     currentIndex: Int,
     onItemClick: (Song) -> Unit,
     onItemRemove: (Int) -> Unit,
+    onClearQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -476,12 +480,29 @@ private fun QueueView(
     }
     
     Column(modifier = modifier) {
-        Text(
-            text = "Queue (${queue.size} songs)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Queue (${queue.size} songs)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            if (queue.isNotEmpty()) {
+                TextButton(onClick = onClearQueue) {
+                    Text(
+                        text = "Clear All",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
         
         LazyColumn(
             state = listState,

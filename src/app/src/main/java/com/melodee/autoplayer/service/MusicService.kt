@@ -90,6 +90,7 @@ class MusicService : MediaBrowserServiceCompat() {
         const val ACTION_TOGGLE_SHUFFLE = "com.melodee.autoplayer.ACTION_TOGGLE_SHUFFLE"
         const val ACTION_TOGGLE_REPEAT = "com.melodee.autoplayer.ACTION_TOGGLE_REPEAT"
         const val ACTION_TOGGLE_FAVORITE = "com.melodee.autoplayer.ACTION_TOGGLE_FAVORITE"
+        const val ACTION_CLEAR_QUEUE = "com.melodee.autoplayer.ACTION_CLEAR_QUEUE"
         const val EXTRA_SONG = "com.melodee.autoplayer.EXTRA_SONG"
         const val EXTRA_POSITION = "com.melodee.autoplayer.EXTRA_POSITION"
         const val EXTRA_PLAYLIST = "com.melodee.autoplayer.EXTRA_PLAYLIST"
@@ -789,6 +790,10 @@ class MusicService : MediaBrowserServiceCompat() {
                 queueManager.toggleRepeat()
                 updateMediaSessionPlaybackState()
             }
+            ACTION_CLEAR_QUEUE -> {
+                Log.d("MusicService", "Received clear queue command")
+                clearQueue()
+            }
             ACTION_TOGGLE_FAVORITE -> {
                 Log.d("MusicService", "Received toggle favorite command")
                 toggleCurrentSongFavorite()
@@ -1190,6 +1195,8 @@ class MusicService : MediaBrowserServiceCompat() {
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, song.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, song.artist.name)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, song.album.name)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, song.artist.name)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, song.artist.name)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, song.imageUrl)
             .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, song.thumbnailUrl)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
@@ -1386,6 +1393,47 @@ class MusicService : MediaBrowserServiceCompat() {
     fun getCurrentSong(): Song? = currentSong
     
     fun getCurrentPlaybackContext(): PlaybackContext = currentPlaybackContext
+
+    private fun clearQueue() {
+        Log.d("MusicService", "Clearing queue and stopping playback")
+        
+        // Stop the player and clear current song
+        player?.stop()
+        currentSong = null
+        
+        // Clear both queue and playlist managers
+        queueManager.clearQueue()
+        playlistManager.clear()
+        
+        // Clear browsing context
+        currentBrowsingPlaylistId = null
+        currentBrowsingPlaylistSongs = emptyList()
+        
+        // Clear search cache
+        searchResultsCache = emptyList()
+        searchResultsCacheTime = 0
+        
+        // Reset playback context
+        currentPlaybackContext = PlaybackContext.SINGLE_SONG
+        
+        // Update media session
+        updateMediaSessionPlaybackState()
+        
+        // Clear metadata
+        mediaSession?.setMetadata(null)
+        notifyQueueChanged()
+        
+        // Stop foreground service and remove notification
+        abandonAudioFocus()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        
+        Log.d("MusicService", "Queue cleared successfully")
+    }
 
     fun reinitializeScrobbleManager() {
         Log.d("MusicService", "Reinitializing ScrobbleManager")
@@ -1936,7 +1984,7 @@ class MusicService : MediaBrowserServiceCompat() {
                     player?.play()
                     updateMediaSessionPlaybackState()
                 }
-                // Restore full volume if it was ducked
+                               // Restore full volume if it was ducked
                 player?.volume = 1.0f
                 Log.i("MusicService", "Audio focus handling complete - volume restored")
             }
@@ -1958,7 +2006,7 @@ class MusicService : MediaBrowserServiceCompat() {
                             attempts++
                             val delayMs = when (attempts) {
                                 1 -> 100L   // First attempt very quickly
-                                2 -> 250L   // Second attempt after quarter second
+                                2 -> 250L // Second attempt after quarter second
                                 3 -> 500L   // Third attempt after half second
                                 else -> 1000L // Later attempts after full second
                             }
