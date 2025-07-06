@@ -362,11 +362,16 @@ class MusicService : MediaBrowserServiceCompat() {
         }
         
         Log.d("MusicService", "Loading ${songs.size} songs for current queue")
+        Log.d("MusicService", "Current song: ${currentSong?.title}")
+        Log.d("MusicService", "Queue manager songs: ${queueManager.currentQueue.value.size}")
+        Log.d("MusicService", "Playlist manager songs: ${playlistManager.currentPlaylist.value.size}")
         
         if (songs.isNotEmpty()) {
             songs.forEach { song ->
                 mediaItems.add(createMediaItem(song))
             }
+            
+            Log.d("MusicService", "Current Queue: Returning ${mediaItems.size} songs")
         } else {
             // Show "no content" message instead of empty list
             mediaItems.add(
@@ -374,11 +379,13 @@ class MusicService : MediaBrowserServiceCompat() {
                     MediaDescriptionCompat.Builder()
                         .setMediaId("empty_queue")
                         .setTitle("Queue is Empty")
-                        .setSubtitle("Play songs from the app to populate your queue")
+                        .setSubtitle("Play songs from a playlist to populate your queue")
                         .build(),
                     MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
                 )
             )
+            
+            Log.d("MusicService", "Current Queue: No songs available, showing empty message")
         }
         
         result.sendResult(mediaItems)
