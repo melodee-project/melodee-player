@@ -20,12 +20,15 @@ class MelodeeApplication : Application(), ImageLoaderFactory {
     
     override fun onCreate() {
         super.onCreate()
-        Log.d("MelodeeApplication", "Application onCreate")
+        Log.i("MelodeeApplication", "=== APPLICATION STARTUP ===")
+        Log.i("MelodeeApplication", "Application onCreate")
         
         // Initialize authentication manager early
+        Log.i("MelodeeApplication", "Initializing AuthenticationManager...")
         authenticationManager = AuthenticationManager(this)
         
-        Log.d("MelodeeApplication", "Authentication manager initialized")
+        Log.i("MelodeeApplication", "Authentication manager initialized")
+        Log.i("MelodeeApplication", "=== APPLICATION STARTUP COMPLETE ===")
     }
     override fun newImageLoader(): ImageLoader {
         val loggingInterceptor = HttpLoggingInterceptor { message ->

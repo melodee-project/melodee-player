@@ -514,10 +514,23 @@ class MusicService : MediaBrowserServiceCompat() {
         return withContext(Dispatchers.IO) {
             try {
                 Log.d("MusicService", "Fetching songs for playlist: $playlistId")
+                
+                // Verify authentication before making API call
+                if (!verifyAuthentication()) {
+                    Log.e("MusicService", "Cannot fetch playlist songs - not authenticated")
+                    throw Exception("Not authenticated")
+                }
+                
                 val musicApi = NetworkModule.getMusicApi()
                 val songsResponse = musicApi.getPlaylistSongs(playlistId, 1, 100) // Get first 100 songs
                 
                 Log.d("MusicService", "API returned ${songsResponse.data.size} songs for playlist $playlistId")
+                
+                // Log stream URLs for debugging
+                songsResponse.data.take(3).forEach { song ->
+                    Log.d("MusicService", "Sample song: ${song.title} - Stream URL: ${song.streamUrl}")
+                }
+                
                 return@withContext songsResponse.data
                 
             } catch (e: Exception) {
@@ -863,47 +876,96 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     private fun playSong(song: Song) {
-        Log.d("MusicService", "Playing song: ${song.title}")
-        Log.d("MusicService", "Stream URL: ${song.streamUrl}")
+        Log.i("MusicService", "=== ATTEMPTING TO PLAY SONG ===")
+        Log.i("MusicService", "Song ID: ${song.id}")
+        Log.i("MusicService", "Song title: ${song.title}")
+        Log.i("MusicService", "Song artist: ${song.artist.name}")
+        Log.i("MusicService", "Stream URL: ${song.streamUrl}")
+        Log.i("MusicService", "Stream URL length: ${song.streamUrl.length}")
+        Log.i("MusicService", "Stream URL valid: ${song.streamUrl.isNotBlank() && song.streamUrl.startsWith("http")}")
         
-        // Request audio focus before starting playback
-        if (!requestAudioFocus()) {
-            Log.w("MusicService", "Could not gain audio focus, cannot start playback")
+        // Validate stream URL
+        if (song.streamUrl.isBlank() || !song.streamUrl.startsWith("http")) {
+            Log.e("MusicService", "Invalid stream URL: '${song.streamUrl}' - cannot play song")
             return
         }
         
+        // Request audio focus before starting playback - be aggressive about it
+        Log.d("MusicService", "Requesting audio focus...")
+        var focusGained = requestAudioFocus()
+        
+        if (!focusGained) {
+            Log.w("MusicService", "Initial audio focus request failed - trying force method for Android Auto")
+            focusGained = forceAudioFocusForAndroidAuto()
+        }
+        
+        if (!focusGained) {
+            Log.w("MusicService", "Force method failed - trying super aggressive approach")
+            focusGained = superAggressiveAudioFocus()
+        }
+        
+        if (!focusGained) {
+            Log.e("MusicService", "Could not gain audio focus after all attempts, cannot start playback")
+            return
+        }
+        Log.d("MusicService", "Audio focus granted successfully")
+        
         // Stop tracking previous song
         currentSong?.let { prevSong ->
+            Log.d("MusicService", "Stopping scrobble tracking for previous song: ${prevSong.title}")
             scrobbleManager?.stopTracking(prevSong.id.toString())
         }
         
         try {
+            Log.d("MusicService", "Creating MediaItem from URI: ${song.streamUrl}")
             val mediaItem = MediaItem.fromUri(song.streamUrl)
-            Log.d("MusicService", "Created media item for: ${song.streamUrl}")
+            Log.d("MusicService", "Created media item successfully")
             
-            player?.setMediaItem(mediaItem)
-            Log.d("MusicService", "Set media item in player")
+            val player = this.player
+            if (player == null) {
+                Log.e("MusicService", "Player is null! Cannot set media item")
+                return
+            }
             
-            player?.prepare()
-            Log.d("MusicService", "Prepared player")
+            Log.d("MusicService", "Setting media item in player...")
+            player.setMediaItem(mediaItem)
+            Log.d("MusicService", "Media item set successfully")
             
-            player?.play()
-            Log.d("MusicService", "Started playback")
+            Log.d("MusicService", "Preparing player...")
+            player.prepare()
+            Log.d("MusicService", "Player prepared")
             
+            Log.d("MusicService", "Starting playback...")
+            player.play()
+            Log.d("MusicService", "Playback started successfully")
+            
+            // Update current song
             currentSong = song
-            Log.d("MusicService", "Updated current song")
+            Log.d("MusicService", "Updated current song reference")
 
             // Ensure MediaSession is active and ready
             mediaSession?.isActive = true
+            Log.d("MusicService", "MediaSession activated")
             
             // Update MediaSession metadata
             updateMediaSessionMetadata(song)
+            Log.d("MusicService", "MediaSession metadata updated")
 
             // Start as foreground service with notification
-            startForeground(NOTIFICATION_ID, createNotification(song))
+            val notification = createNotification(song)
+            startForeground(NOTIFICATION_ID, notification)
+            Log.d("MusicService", "Started foreground service with notification")
+            
+            Log.i("MusicService", "=== SONG PLAYBACK SETUP COMPLETE ===")
         } catch (e: Exception) {
-            Log.e("MusicService", "Error playing song: ${e.message}", e)
+            Log.e("MusicService", "=== ERROR PLAYING SONG ===")
+            Log.e("MusicService", "Error type: ${e.javaClass.simpleName}")
+            Log.e("MusicService", "Error message: ${e.message}")
+            Log.e("MusicService", "Full error:", e)
             e.printStackTrace()
+            
+            // Handle the failure with enhanced error reporting
+            handlePlaybackFailure(song, e)
         }
     }
 
@@ -917,7 +979,7 @@ class MusicService : MediaBrowserServiceCompat() {
             .build()
         
         player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true) // Handle audio focus automatically
+            .setAudioAttributes(audioAttributes, false) // Disable automatic audio focus - we handle it manually
             .build().apply {
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
@@ -1095,6 +1157,48 @@ class MusicService : MediaBrowserServiceCompat() {
         
         player?.play()
         updateMediaSessionPlaybackState()
+    }
+
+    private fun startPlaybackFromCurrentContext() {
+        Log.d("MusicService", "Starting playback from current context")
+        
+        // First, try to play from currently browsed playlist
+        if (currentBrowsingPlaylistId != null && currentBrowsingPlaylistSongs.isNotEmpty()) {
+            Log.d("MusicService", "Playing from browsed playlist: $currentBrowsingPlaylistId")
+            val firstSong = currentBrowsingPlaylistSongs.first()
+            
+            // Set the playlist context and play the first song
+            currentPlaybackContext = PlaybackContext.PLAYLIST
+            queueManager.setQueue(currentBrowsingPlaylistSongs, 0)
+            playlistManager.setPlaylist(currentBrowsingPlaylistSongs, 0)
+            playSong(firstSong)
+            return
+        }
+        
+        // Second, try to play from current queue
+        val queueSongs = queueManager.currentQueue.value
+        if (queueSongs.isNotEmpty()) {
+            Log.d("MusicService", "Playing from current queue")
+            val firstSong = queueSongs.first()
+            currentPlaybackContext = PlaybackContext.PLAYLIST
+            playlistManager.setPlaylist(queueSongs, 0)
+            playSong(firstSong)
+            return
+        }
+        
+        // Third, try to play from current playlist
+        val playlistSongs = playlistManager.currentPlaylist.value
+        if (playlistSongs.isNotEmpty()) {
+            Log.d("MusicService", "Playing from current playlist")
+            val firstSong = playlistSongs.first()
+            currentPlaybackContext = PlaybackContext.PLAYLIST
+            queueManager.setQueue(playlistSongs, 0)
+            playSong(firstSong)
+            return
+        }
+        
+        // No context available
+        Log.w("MusicService", "No playback context available - cannot start playback")
     }
 
     private fun stopPlayback() {
@@ -1282,8 +1386,21 @@ class MusicService : MediaBrowserServiceCompat() {
         
         mediaSession?.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                Log.d("MusicService", "MediaSession onPlay")
-                resumePlayback()
+                Log.d("MusicService", "MediaSession onPlay called")
+                Log.d("MusicService", "Current song: ${currentSong?.title}")
+                Log.d("MusicService", "Player has media item: ${player?.currentMediaItem != null}")
+                Log.d("MusicService", "Current browsing playlist: $currentBrowsingPlaylistId")
+                Log.d("MusicService", "Browsing songs count: ${currentBrowsingPlaylistSongs.size}")
+                
+                // If there's already a song loaded, just resume
+                if (currentSong != null && player?.currentMediaItem != null) {
+                    Log.d("MusicService", "Resuming existing playback")
+                    resumePlayback()
+                } else {
+                    // No song loaded, try to start playback from current context
+                    Log.d("MusicService", "No current song, attempting to start from context")
+                    startPlaybackFromCurrentContext()
+                }
             }
 
             override fun onPause() {
@@ -1351,9 +1468,14 @@ class MusicService : MediaBrowserServiceCompat() {
             }
 
             override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
-                Log.d("MusicService", "MediaSession onPlayFromMediaId: $mediaId")
-                Log.d("MusicService", "Current browsing playlist ID: $currentBrowsingPlaylistId")
-                Log.d("MusicService", "Extras: $extras")
+                Log.i("MusicService", "=== ANDROID AUTO PLAY REQUEST ===")
+                Log.i("MusicService", "MediaID: $mediaId")
+                Log.i("MusicService", "Current browsing playlist ID: $currentBrowsingPlaylistId")
+                Log.i("MusicService", "Browsing playlist songs count: ${currentBrowsingPlaylistSongs.size}")
+                Log.i("MusicService", "Queue songs count: ${queueManager.currentQueue.value.size}")
+                Log.i("MusicService", "Playlist songs count: ${playlistManager.currentPlaylist.value.size}")
+                Log.i("MusicService", "Extras: $extras")
+                
                 // Handle playing specific songs by media ID
                 mediaId?.let { id ->
                     if (id.startsWith("no_") || id.startsWith("help_") || id.startsWith("empty_") || 
@@ -1363,28 +1485,37 @@ class MusicService : MediaBrowserServiceCompat() {
                         return@let
                     }
                     
+                    Log.d("MusicService", "Searching for song with ID: $id")
+                    
                     // First try to find the song in current browsing content
                     val queueSongs = queueManager.currentQueue.value
                     val playlistSongs = playlistManager.currentPlaylist.value
                     val browsingPlaylistSongs = currentBrowsingPlaylistSongs
                     val allSongs = (queueSongs + playlistSongs + browsingPlaylistSongs).distinctBy { it.id }
                     
+                    Log.d("MusicService", "Total searchable songs: ${allSongs.size}")
+                    Log.d("MusicService", "Song IDs available: ${allSongs.map { it.id.toString() }}")
+                    
                     val song = allSongs.find { it.id.toString() == id }
                     if (song != null) {
-                        Log.d("MusicService", "Found song in local content: ${song.title}")
+                        Log.i("MusicService", "Found song: ${song.title} by ${song.artist.name}")
+                        Log.i("MusicService", "Song stream URL: ${song.streamUrl}")
+                        
                         // Check if we're browsing a playlist context
                         if (currentBrowsingPlaylistId != null) {
-                            Log.d("MusicService", "Playing song from playlist context: $currentBrowsingPlaylistId")
+                            Log.i("MusicService", "Playing song from playlist context: $currentBrowsingPlaylistId")
                             currentPlaybackContext = PlaybackContext.PLAYLIST
                             // Load the entire playlist if needed
                             loadPlaylistAndPlay(currentBrowsingPlaylistId!!, song)
                         } else {
+                            Log.i("MusicService", "Playing song as individual track")
                             queueManager.addToQueue(song)
                             playlistManager.playSong(song)
                             playSong(song)
                         }
                     } else {
                         Log.w("MusicService", "Song with mediaId $id not found in local content")
+                        Log.w("MusicService", "Available song IDs: ${allSongs.map { "${it.id} (${it.title})" }}")
                         // Try to fetch and play the song from API (for search results or new playlists)
                         fetchAndPlaySong(id)
                     }
@@ -1425,22 +1556,35 @@ class MusicService : MediaBrowserServiceCompat() {
 
     // Helper methods for playlist handling
     private fun loadPlaylistAndPlay(playlistId: String, songToPlay: Song) {
+        Log.i("MusicService", "=== LOADING PLAYLIST AND PLAYING SONG ===")
+        Log.i("MusicService", "Playlist ID: $playlistId")
+        Log.i("MusicService", "Song to play: ${songToPlay.title}")
+        
         serviceScope.launch {
             try {
-                Log.d("MusicService", "Loading playlist $playlistId and playing song: ${songToPlay.title}")
+                Log.d("MusicService", "Fetching playlist songs...")
                 val playlistSongs = fetchPlaylistSongs(playlistId)
                 
                 if (playlistSongs.isNotEmpty()) {
+                    Log.i("MusicService", "Fetched ${playlistSongs.size} songs from playlist")
                     val startIndex = playlistSongs.indexOfFirst { it.id == songToPlay.id }
+                    Log.i("MusicService", "Start index for song: $startIndex")
                     
-                    currentPlaybackContext = PlaybackContext.PLAYLIST
-                    queueManager.setQueue(playlistSongs, maxOf(0, startIndex))
-                    playlistManager.setPlaylist(playlistSongs, maxOf(0, startIndex))
-                    playSong(songToPlay)
-                    
-                    Log.d("MusicService", "Loaded playlist with ${playlistSongs.size} songs, playing index: $startIndex")
+                    if (startIndex >= 0) {
+                        currentPlaybackContext = PlaybackContext.PLAYLIST
+                        queueManager.setQueue(playlistSongs, startIndex)
+                        playlistManager.setPlaylist(playlistSongs, startIndex)
+                        playSong(songToPlay)
+                        
+                        Log.i("MusicService", "Successfully loaded playlist and started playback")
+                    } else {
+                        Log.w("MusicService", "Song not found in playlist, playing as standalone")
+                        queueManager.addToQueue(songToPlay)
+                        playlistManager.playSong(songToPlay)
+                        playSong(songToPlay)
+                    }
                 } else {
-                    Log.w("MusicService", "Playlist $playlistId is empty")
+                    Log.w("MusicService", "Playlist $playlistId is empty, playing song standalone")
                     // Just play the single song
                     queueManager.addToQueue(songToPlay)
                     playlistManager.playSong(songToPlay)
@@ -1448,7 +1592,11 @@ class MusicService : MediaBrowserServiceCompat() {
                 }
             } catch (e: Exception) {
                 Log.e("MusicService", "Failed to load playlist $playlistId", e)
+                Log.e("MusicService", "Error details: ${e.message}")
+                e.printStackTrace()
+                
                 // Fallback to playing just the single song
+                Log.i("MusicService", "Falling back to standalone song playback")
                 queueManager.addToQueue(songToPlay)
                 playlistManager.playSong(songToPlay)
                 playSong(songToPlay)
@@ -1528,7 +1676,9 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     private fun requestAudioFocus(): Boolean {
-        Log.d("MusicService", "Requesting audio focus")
+        Log.i("MusicService", "=== REQUESTING AUDIO FOCUS ===")
+        Log.d("MusicService", "Current hasAudioFocus: $hasAudioFocus")
+        Log.d("MusicService", "Android version: ${Build.VERSION.SDK_INT}")
         
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val audioAttributes = AudioAttributes.Builder()
@@ -1538,13 +1688,25 @@ class MusicService : MediaBrowserServiceCompat() {
 
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(audioAttributes)
-                .setAcceptsDelayedFocusGain(true)
+                .setAcceptsDelayedFocusGain(true) // Important for Android Auto
+                .setWillPauseWhenDucked(false)   // Don't pause when other apps duck
                 .setOnAudioFocusChangeListener(audioFocusChangeListener)
                 .build()
 
             val result = audioManager.requestAudioFocus(audioFocusRequest!!)
-            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            Log.d("MusicService", "Audio focus request result: $result, hasAudioFocus: $hasAudioFocus")
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED || 
+                           result == AudioManager.AUDIOFOCUS_REQUEST_DELAYED
+            
+            Log.i("MusicService", "Audio focus request result: $result")
+            Log.i("MusicService", "AUDIOFOCUS_REQUEST_GRANTED = ${AudioManager.AUDIOFOCUS_REQUEST_GRANTED}")
+            Log.i("MusicService", "AUDIOFOCUS_REQUEST_FAILED = ${AudioManager.AUDIOFOCUS_REQUEST_FAILED}")
+            Log.i("MusicService", "AUDIOFOCUS_REQUEST_DELAYED = ${AudioManager.AUDIOFOCUS_REQUEST_DELAYED}")
+            Log.i("MusicService", "Audio focus granted or delayed: $hasAudioFocus")
+            
+            if (result == AudioManager.AUDIOFOCUS_REQUEST_DELAYED) {
+                Log.i("MusicService", "Audio focus delayed - will be granted when available")
+            }
+            
             hasAudioFocus
         } else {
             @Suppress("DEPRECATION")
@@ -1554,7 +1716,10 @@ class MusicService : MediaBrowserServiceCompat() {
                 AudioManager.AUDIOFOCUS_GAIN
             )
             hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            Log.d("MusicService", "Audio focus request result (legacy): $result, hasAudioFocus: $hasAudioFocus")
+            
+            Log.i("MusicService", "Audio focus request result (legacy): $result")
+            Log.i("MusicService", "Audio focus granted (legacy): $hasAudioFocus")
+            
             hasAudioFocus
         }
     }
@@ -1573,36 +1738,265 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
-        Log.d("MusicService", "Audio focus changed: $focusChange")
+        Log.i("MusicService", "=== AUDIO FOCUS CHANGED: $focusChange ===")
+        Log.i("MusicService", "AUDIOFOCUS_GAIN = ${AudioManager.AUDIOFOCUS_GAIN}")
+        Log.i("MusicService", "AUDIOFOCUS_LOSS = ${AudioManager.AUDIOFOCUS_LOSS}")
+        Log.i("MusicService", "AUDIOFOCUS_LOSS_TRANSIENT = ${AudioManager.AUDIOFOCUS_LOSS_TRANSIENT}")
+        Log.i("MusicService", "AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK = ${AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK}")
+        
         when (focusChange) {
             AudioManager.AUDIOFOCUS_GAIN -> {
-                Log.d("MusicService", "Audio focus gained")
+                Log.i("MusicService", "Audio focus gained - checking if we should resume")
                 hasAudioFocus = true
-                // Resume playback if it was paused due to focus loss
+                
+                // Resume playback if we have a current song and player is not playing
                 if (currentSong != null && player?.isPlaying == false) {
-                    Log.d("MusicService", "Resuming playback after gaining audio focus")
-                    resumePlayback()
+                    Log.i("MusicService", "Resuming playback after gaining audio focus")
+                    player?.play()
+                    updateMediaSessionPlaybackState()
                 }
-                // Restore volume if it was ducked
+                // Restore full volume if it was ducked
                 player?.volume = 1.0f
+                Log.i("MusicService", "Audio focus handling complete - volume restored")
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
-                Log.d("MusicService", "Audio focus lost permanently")
+                Log.w("MusicService", "Audio focus lost permanently - this may be an Android Auto conflict")
                 hasAudioFocus = false
-                pausePlayback()
+                
+                // Check if this is happening immediately after we gained focus (Android Auto bug)
+                val wasPlaying = player?.isPlaying == true
+                if (wasPlaying && currentSong != null) {
+                    Log.w("MusicService", "Detected immediate focus loss while playing - attempting aggressive reclaim")
+                    
+                    // Try to reclaim focus multiple times with different strategies
+                    serviceScope.launch {
+                        var attempts = 0
+                        val maxAttempts = 5
+                        
+                        while (attempts < maxAttempts && !hasAudioFocus && currentSong != null) {
+                            attempts++
+                            val delayMs = when (attempts) {
+                                1 -> 100L   // First attempt very quickly
+                                2 -> 250L   // Second attempt after quarter second
+                                3 -> 500L   // Third attempt after half second
+                                else -> 1000L // Later attempts after full second
+                            }
+                            
+                            Log.i("MusicService", "Attempt $attempts/$maxAttempts: Waiting ${delayMs}ms before reclaiming focus")
+                            delay(delayMs)
+                            
+                            if (!hasAudioFocus && currentSong != null) {
+                                Log.i("MusicService", "Attempt $attempts: Trying to reclaim audio focus...")
+                                
+                                val focusGained = if (attempts <= 2) {
+                                    // Use normal request for first two attempts
+                                    requestAudioFocus()
+                                } else {
+                                    // Use super aggressive method for later attempts
+                                    Log.w("MusicService", "Using superAggressiveAudioFocus for attempt $attempts")
+                                    superAggressiveAudioFocus()
+                                }
+                                
+                                if (focusGained) {
+                                    Log.i("MusicService", "Successfully reclaimed audio focus on attempt $attempts - resuming playback")
+                                    player?.play()
+                                    updateMediaSessionPlaybackState()
+                                    break
+                                } else {
+                                    Log.w("MusicService", "Failed to reclaim audio focus on attempt $attempts")
+                                }
+                            } else {
+                                Log.i("MusicService", "Focus regained or song cleared during retry loop - stopping attempts")
+                                break
+                            }
+                        }
+                        
+                        // If all attempts failed, pause playback
+                        if (!hasAudioFocus && currentSong != null) {
+                            Log.e("MusicService", "Failed to reclaim audio focus after $maxAttempts attempts - pausing playback")
+                            pausePlayback()
+                        }
+                    }
+                } else {
+                    // Normal focus loss - pause playback
+                    pausePlayback()
+                }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                Log.d("MusicService", "Audio focus lost temporarily")
+                Log.i("MusicService", "Audio focus lost temporarily - pausing")
                 hasAudioFocus = false
                 pausePlayback()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                Log.d("MusicService", "Audio focus lost temporarily - ducking")
+                Log.i("MusicService", "Audio focus lost temporarily - ducking volume")
                 // Lower the volume instead of pausing
                 player?.volume = 0.2f
             }
         }
+        
+        Log.i("MusicService", "Audio focus change handling complete. Current state: hasAudioFocus=$hasAudioFocus, isPlaying=${player?.isPlaying}")
     }
 
-    // ...existing code...
+    private fun verifyAuthentication(): Boolean {
+        val isAuthenticatedState = authenticationManager.isAuthenticated.value
+        val hasNetworkToken = NetworkModule.isAuthenticated()
+        val currentUser = authenticationManager.getCurrentUser()
+        
+        Log.i("MusicService", "=== AUTHENTICATION VERIFICATION ===")
+        Log.i("MusicService", "AuthenticationManager state: $isAuthenticatedState")
+        Log.i("MusicService", "NetworkModule has token: $hasNetworkToken")
+        Log.i("MusicService", "Current user: ${currentUser?.username ?: "null"}")
+        
+        // If we have network token and user data but AuthenticationManager state is false,
+        // try to restore the authentication state
+        if (!isAuthenticatedState && hasNetworkToken && currentUser != null) {
+            Log.w("MusicService", "Authentication state mismatch detected - attempting to restore")
+            
+            // Force re-check authentication in AuthenticationManager
+            try {
+                // Re-initialize the AuthenticationManager state based on stored data
+                val settingsManager = SettingsManager(this)
+                if (settingsManager.isAuthenticated()) {
+                    Log.i("MusicService", "Stored authentication data is valid - restoring state")
+                    
+                    // Manually trigger authentication restoration
+                    NetworkModule.setBaseUrl(settingsManager.serverUrl)
+                    NetworkModule.setAuthToken(settingsManager.authToken)
+                    
+                    // Update AuthenticationManager state through saveAuthentication
+                    authenticationManager.saveAuthentication(
+                        settingsManager.authToken,
+                        settingsManager.userId,
+                        settingsManager.userEmail,
+                        settingsManager.username,
+                        settingsManager.serverUrl
+                    )
+                    
+                    Log.i("MusicService", "Authentication state restored successfully")
+                    return true
+                }
+            } catch (e: Exception) {
+                Log.e("MusicService", "Failed to restore authentication state", e)
+            }
+        }
+        
+        val isFullyAuthenticated = isAuthenticatedState && hasNetworkToken && currentUser != null
+        Log.i("MusicService", "Fully authenticated: $isFullyAuthenticated")
+        
+        return isFullyAuthenticated
+    }
+
+    private fun handlePlaybackFailure(song: Song, error: Exception) {
+        Log.e("MusicService", "=== PLAYBACK FAILURE HANDLER ===")
+        Log.e("MusicService", "Failed song: ${song.title}")
+        Log.e("MusicService", "Stream URL: ${song.streamUrl}")
+        Log.e("MusicService", "Error: ${error.message}")
+        
+        // Check authentication status
+        if (!verifyAuthentication()) {
+            Log.e("MusicService", "Playback failed due to authentication issues")
+        }
+        
+        // Update MediaSession to show error state
+        val errorState = PlaybackStateCompat.Builder()
+            .setState(PlaybackStateCompat.STATE_ERROR, 0, 1.0f)
+            .setErrorMessage(PlaybackStateCompat.ERROR_CODE_APP_ERROR, "Playback failed: ${error.message}")
+            .setActions(
+                PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackStateCompat.ACTION_SEEK_TO or
+                PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
+                PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
+                PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE or
+                PlaybackStateCompat.ACTION_SET_REPEAT_MODE
+            )
+            .build()
+        
+        mediaSession?.setPlaybackState(errorState)
+        
+        // Abandon audio focus
+        abandonAudioFocus()
+    }
+
+    // Special method for Android Auto to aggressively claim audio focus
+    private fun forceAudioFocusForAndroidAuto(): Boolean {
+        Log.i("MusicService", "=== FORCING AUDIO FOCUS FOR ANDROID AUTO ===")
+        
+        // First, abandon any existing focus
+        abandonAudioFocus()
+        
+        // Wait a moment
+        Thread.sleep(100)
+        
+        // Request focus with more aggressive settings
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED) // Force audibility
+                .build()
+
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(audioAttributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setWillPauseWhenDucked(false)
+                .setForceDucking(false) // Don't allow other apps to duck us
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+
+            val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED || 
+                           result == AudioManager.AUDIOFOCUS_REQUEST_DELAYED
+            
+            Log.i("MusicService", "Forced audio focus result: $result, hasAudioFocus: $hasAudioFocus")
+            hasAudioFocus
+        } else {
+            // For older versions, use legacy method
+            requestAudioFocus()
+        }
+    }
+
+    // Ultra-aggressive method that tries multiple strategies
+    private fun superAggressiveAudioFocus(): Boolean {
+        Log.i("MusicService", "=== SUPER AGGRESSIVE AUDIO FOCUS ===")
+        
+        // Strategy 1: Normal request
+        if (requestAudioFocus()) {
+            Log.i("MusicService", "Audio focus gained with normal request")
+            return true
+        }
+        
+        // Strategy 2: Force method
+        if (forceAudioFocusForAndroidAuto()) {
+            Log.i("MusicService", "Audio focus gained with force method")
+            return true
+        }
+        
+        // Strategy 3: Multiple attempts with delays
+        repeat(3) { attempt ->
+            Log.i("MusicService", "Attempting audio focus with delay strategy: attempt ${attempt + 1}")
+            Thread.sleep(200L * (attempt + 1))
+            
+            if (requestAudioFocus()) {
+                Log.i("MusicService", "Audio focus gained with delay strategy on attempt ${attempt + 1}")
+                return true
+            }
+        }
+        
+        // Strategy 4: Try to become audio focus owner by requesting and abandoning quickly
+        Log.i("MusicService", "Trying rapid request/abandon cycle to claim focus")
+        repeat(3) {
+            requestAudioFocus()
+            Thread.sleep(50)
+            abandonAudioFocus()
+            Thread.sleep(50)
+        }
+        
+        // Final attempt
+        val finalResult = requestAudioFocus()
+        Log.i("MusicService", "Final aggressive audio focus result: $finalResult")
+        return finalResult
+    }
 }

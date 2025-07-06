@@ -16,18 +16,41 @@ object NetworkModule {
     
     // Callback for handling authentication failures
     private var onAuthenticationFailure: (() -> Unit)? = null
+    
+    // Flag to prevent multiple 401 callbacks
+    private var handlingAuthFailure = false
 
     fun setBaseUrl(url: String) {
+        Log.i("NetworkModule", "=== SETTING BASE URL ===")
+        Log.i("NetworkModule", "Old base URL: '$baseUrl'")
+        Log.i("NetworkModule", "New base URL: '$url'")
+        
         if (baseUrl != url) {
             baseUrl = url
+            Log.d("NetworkModule", "Base URL changed, recreating Retrofit instance")
             createRetrofitInstance()
+        } else {
+            Log.d("NetworkModule", "Base URL unchanged, skipping Retrofit recreation")
         }
+        
+        Log.i("NetworkModule", "Base URL set to: '$baseUrl'")
     }
 
     fun setAuthToken(token: String) {
+        Log.i("NetworkModule", "=== SETTING AUTH TOKEN ===")
+        Log.i("NetworkModule", "Token present: ${token.isNotEmpty()}")
+        if (token.isNotEmpty()) {
+            Log.i("NetworkModule", "Token preview: ${token.take(20)}...")
+        }
+        
         authToken = token
+        // Reset auth failure flag when setting new token
+        handlingAuthFailure = false
         // Recreate the Retrofit instance to update the auth token
+        Log.d("NetworkModule", "Recreating Retrofit instance with new token")
         createRetrofitInstance()
+        
+        Log.i("NetworkModule", "Auth token configured")
     }
 
     fun getAuthToken(): String? {
@@ -62,8 +85,9 @@ object NetworkModule {
                 val response = chain.proceed(request)
                 
                 // Handle 401 Unauthorized responses
-                if (response.code == 401) {
+                if (response.code == 401 && !handlingAuthFailure) {
                     Log.w("NetworkModule", "Received 401 Unauthorized - token expired")
+                    handlingAuthFailure = true
                     // Clear authentication and notify callback
                     clearAuthentication()
                     onAuthenticationFailure?.invoke()

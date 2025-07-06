@@ -28,24 +28,61 @@ class AuthenticationManager(private val context: Context) {
     }
     
     private fun checkExistingAuthentication() {
-        Log.d("AuthenticationManager", "Checking existing authentication")
+        Log.i("AuthenticationManager", "=== CHECKING EXISTING AUTHENTICATION ===")
         
-        if (settingsManager.isAuthenticated()) {
-            Log.d("AuthenticationManager", "Found existing authentication, initializing NetworkModule")
+        val hasAuthToken = settingsManager.authToken.isNotEmpty()
+        val hasServerUrl = settingsManager.serverUrl.isNotEmpty()
+        val hasUserId = settingsManager.userId.isNotEmpty()
+        val hasUsername = settingsManager.username.isNotEmpty()
+        val hasUserEmail = settingsManager.userEmail.isNotEmpty()
+        
+        Log.i("AuthenticationManager", "Auth token present: $hasAuthToken")
+        Log.i("AuthenticationManager", "Server URL present: $hasServerUrl")
+        Log.i("AuthenticationManager", "User ID present: $hasUserId")
+        Log.i("AuthenticationManager", "Username present: $hasUsername")
+        Log.i("AuthenticationManager", "User email present: $hasUserEmail")
+        
+        if (hasAuthToken) {
+            Log.i("AuthenticationManager", "Auth token: ${settingsManager.authToken.take(20)}...")
+        }
+        if (hasServerUrl) {
+            Log.i("AuthenticationManager", "Server URL: ${settingsManager.serverUrl}")
+        }
+        if (hasUsername) {
+            Log.i("AuthenticationManager", "Username: ${settingsManager.username}")
+        }
+        if (hasUserEmail) {
+            Log.i("AuthenticationManager", "User email: ${settingsManager.userEmail}")
+        }
+        
+        val isAuthenticated = settingsManager.isAuthenticated()
+        Log.i("AuthenticationManager", "SettingsManager.isAuthenticated(): $isAuthenticated")
+        
+        if (isAuthenticated) {
+            Log.i("AuthenticationManager", "Found existing authentication, initializing NetworkModule")
             
             // Initialize NetworkModule with stored credentials
+            Log.d("AuthenticationManager", "Setting NetworkModule base URL: ${settingsManager.serverUrl}")
             NetworkModule.setBaseUrl(settingsManager.serverUrl)
+            
+            Log.d("AuthenticationManager", "Setting NetworkModule auth token")
             NetworkModule.setAuthToken(settingsManager.authToken)
+            
+            // Verify NetworkModule state
+            val networkAuthenticated = NetworkModule.isAuthenticated()
+            Log.i("AuthenticationManager", "NetworkModule.isAuthenticated(): $networkAuthenticated")
             
             _isAuthenticated.value = true
             
-            Log.d("AuthenticationManager", "Authentication restored successfully")
-            Log.d("AuthenticationManager", "Server: ${settingsManager.serverUrl}")
-            Log.d("AuthenticationManager", "User: ${settingsManager.username} (${settingsManager.userEmail})")
+            Log.i("AuthenticationManager", "Authentication restored successfully")
+            Log.i("AuthenticationManager", "Server: ${settingsManager.serverUrl}")
+            Log.i("AuthenticationManager", "User: ${settingsManager.username} (${settingsManager.userEmail})")
         } else {
-            Log.d("AuthenticationManager", "No existing authentication found")
+            Log.i("AuthenticationManager", "No existing authentication found")
             _isAuthenticated.value = false
         }
+        
+        Log.i("AuthenticationManager", "Final authentication state: ${_isAuthenticated.value}")
     }
     
     fun saveAuthentication(
@@ -90,12 +127,24 @@ class AuthenticationManager(private val context: Context) {
     private fun handleAuthenticationFailure() {
         Log.w("AuthenticationManager", "Authentication failed - token expired or invalid")
         
-        // Clear stored authentication
-        settingsManager.logout()
+        // Before clearing everything, check if we actually have stored credentials
+        val hasStoredAuth = settingsManager.isAuthenticated()
         
-        // Update state
-        _isAuthenticated.value = false
-        _authenticationError.value = "Your session has expired. Please login again."
+        if (hasStoredAuth) {
+            Log.i("AuthenticationManager", "Still have stored credentials - may be temporary network issue")
+            // Don't clear stored authentication for temporary issues
+            // Just update the state to show we need to re-authenticate
+            _isAuthenticated.value = false
+            _authenticationError.value = "Authentication failed. Please try again or re-login if the problem persists."
+        } else {
+            Log.i("AuthenticationManager", "No stored credentials - clearing authentication")
+            // Clear stored authentication
+            settingsManager.logout()
+            
+            // Update state
+            _isAuthenticated.value = false
+            _authenticationError.value = "Your session has expired. Please login again."
+        }
         
         Log.d("AuthenticationManager", "Authentication failure handled - user needs to re-authenticate")
     }
@@ -124,4 +173,34 @@ class AuthenticationManager(private val context: Context) {
         val email: String,
         val serverUrl: String
     )
+    
+    // Method to manually restore authentication state from stored data
+    fun restoreAuthenticationFromStorage(): Boolean {
+        Log.i("AuthenticationManager", "=== MANUALLY RESTORING AUTHENTICATION ===")
+        
+        try {
+            if (settingsManager.isAuthenticated()) {
+                Log.i("AuthenticationManager", "Found stored authentication data")
+                
+                // Re-initialize NetworkModule with stored credentials
+                NetworkModule.setBaseUrl(settingsManager.serverUrl)
+                NetworkModule.setAuthToken(settingsManager.authToken)
+                
+                // Update state
+                _isAuthenticated.value = true
+                _authenticationError.value = null
+                
+                Log.i("AuthenticationManager", "Authentication restored from storage successfully")
+                Log.i("AuthenticationManager", "User: ${settingsManager.username} at ${settingsManager.serverUrl}")
+                
+                return true
+            } else {
+                Log.w("AuthenticationManager", "No stored authentication data to restore")
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e("AuthenticationManager", "Failed to restore authentication from storage", e)
+            return false
+        }
+    }
 }
