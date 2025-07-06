@@ -1,5 +1,6 @@
 package com.melodee.autoplayer.data.api
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -12,6 +13,9 @@ object NetworkModule {
     private var retrofit: Retrofit? = null
     private var musicApi: MusicApi? = null
     private var scrobbleApi: ScrobbleApi? = null
+    
+    // Callback for handling authentication failures
+    private var onAuthenticationFailure: (() -> Unit)? = null
 
     fun setBaseUrl(url: String) {
         if (baseUrl != url) {
@@ -26,6 +30,26 @@ object NetworkModule {
         createRetrofitInstance()
     }
 
+    fun getAuthToken(): String? {
+        return if (authToken.isNotEmpty()) authToken else null
+    }
+    
+    // Set callback for authentication failures
+    fun setAuthenticationFailureCallback(callback: () -> Unit) {
+        onAuthenticationFailure = callback
+    }
+    
+    // Clear authentication
+    fun clearAuthentication() {
+        authToken = ""
+        createRetrofitInstance()
+    }
+    
+    // Check if authenticated
+    fun isAuthenticated(): Boolean {
+        return authToken.isNotEmpty() && baseUrl.isNotEmpty()
+    }
+
     private fun createRetrofitInstance() {
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
@@ -34,7 +58,18 @@ object NetworkModule {
                     .header("Authorization", "Bearer $authToken")
                     .method(original.method, original.body)
                     .build()
-                chain.proceed(request)
+                
+                val response = chain.proceed(request)
+                
+                // Handle 401 Unauthorized responses
+                if (response.code == 401) {
+                    Log.w("NetworkModule", "Received 401 Unauthorized - token expired")
+                    // Clear authentication and notify callback
+                    clearAuthentication()
+                    onAuthenticationFailure?.invoke()
+                }
+                
+                response
             }
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
@@ -67,4 +102,4 @@ object NetworkModule {
         }
         return scrobbleApi!!
     }
-} 
+}

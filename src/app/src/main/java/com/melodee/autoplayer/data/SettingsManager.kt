@@ -27,6 +27,33 @@ class SettingsManager(context: Context) {
         get() = prefs.getString(KEY_AUTH_TOKEN, "") ?: ""
         set(value) = prefs.edit().putString(KEY_AUTH_TOKEN, value).apply()
 
+    // Check if user is currently authenticated
+    fun isAuthenticated(): Boolean {
+        return authToken.isNotEmpty() && serverUrl.isNotEmpty()
+    }
+
+    // Store complete authentication data
+    fun saveAuthenticationData(
+        token: String,
+        userId: String,
+        userEmail: String,
+        username: String,
+        serverUrl: String
+    ) {
+        prefs.edit()
+            .putString(KEY_AUTH_TOKEN, token)
+            .putString(KEY_USER_ID, userId)
+            .putString(KEY_USER_EMAIL, userEmail)
+            .putString(KEY_USER_NAME, username)
+            .putString(KEY_SERVER_URL, serverUrl)
+            .apply()
+    }
+
+    // Clear all authentication data (logout)
+    fun logout() {
+        clearUserData()
+    }
+
     fun clearUserData() {
         prefs.edit()
             .remove(KEY_USER_ID)
@@ -44,4 +71,4 @@ class SettingsManager(context: Context) {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_AUTH_TOKEN = "auth_token"
     }
-} 
+}

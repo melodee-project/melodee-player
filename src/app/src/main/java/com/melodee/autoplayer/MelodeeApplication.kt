@@ -9,9 +9,24 @@ import coil.memory.MemoryCache
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
+import com.melodee.autoplayer.data.AuthenticationManager
 import java.util.concurrent.TimeUnit
 
 class MelodeeApplication : Application(), ImageLoaderFactory {
+    
+    // Global authentication manager
+    lateinit var authenticationManager: AuthenticationManager
+        private set
+    
+    override fun onCreate() {
+        super.onCreate()
+        Log.d("MelodeeApplication", "Application onCreate")
+        
+        // Initialize authentication manager early
+        authenticationManager = AuthenticationManager(this)
+        
+        Log.d("MelodeeApplication", "Authentication manager initialized")
+    }
     override fun newImageLoader(): ImageLoader {
         val loggingInterceptor = HttpLoggingInterceptor { message ->
             Log.d("OkHttp", message)

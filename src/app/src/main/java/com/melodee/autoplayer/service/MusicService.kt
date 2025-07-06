@@ -24,9 +24,12 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.common.PlaybackException
 import com.melodee.autoplayer.R
 import com.melodee.autoplayer.domain.model.Song
+import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.presentation.ui.MainActivity
 import com.melodee.autoplayer.data.SettingsManager
+import com.melodee.autoplayer.data.AuthenticationManager
 import com.melodee.autoplayer.data.api.NetworkModule
+import com.melodee.autoplayer.MelodeeApplication
 import kotlinx.coroutines.*
 
 class MusicService : MediaBrowserServiceCompat() {
@@ -38,6 +41,7 @@ class MusicService : MediaBrowserServiceCompat() {
     private val queueManager = QueueManager()
     private var scrobbleManager: ScrobbleManager? = null
     private lateinit var settingsManager: SettingsManager
+    private lateinit var authenticationManager: AuthenticationManager
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionUpdateJob: Job? = null
 
@@ -58,6 +62,7 @@ class MusicService : MediaBrowserServiceCompat() {
         // Media Browser IDs
         private const val MEDIA_ROOT_ID = "root"
         private const val MEDIA_PLAYLISTS_ID = "playlists"
+        private const val MEDIA_QUEUE_ID = "queue"
         private const val MEDIA_RECENT_ID = "recent"
         private const val MEDIA_FAVORITES_ID = "favorites"
         
@@ -84,16 +89,51 @@ class MusicService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("MusicService", "onCreate called")
-        Log.d("MusicService", "Service package: ${packageName}")
-        Log.d("MusicService", "Service class: ${this.javaClass.name}")
+        Log.d("MusicService", "MusicService onCreate called")
         
         settingsManager = SettingsManager(this)
-        initializeScrobbleManager()
+        
+        // Get authentication manager from application
+        val app = application as MelodeeApplication
+        authenticationManager = app.authenticationManager
+        
+        // Authentication is now handled by AuthenticationManager
+        // It will automatically restore authentication if available
+        
+        // Debug current state
+        debugAuthenticationState()
+        
         createNotificationChannel()
-        setupMediaSession()
         setupPlayer()
+        setupMediaSession()
+        initializeScrobbleManager()
+        
+        // Add debugging for Android Auto
+        populateTestContentForAndroidAuto()
+        
         Log.d("MusicService", "Service initialization complete")
+    }
+
+    private fun debugAuthenticationState() {
+        try {
+            val isAuthenticated = authenticationManager.isAuthenticated.value
+            val currentUser = authenticationManager.getCurrentUser()
+            val networkHasToken = NetworkModule.isAuthenticated()
+            
+            Log.i("MusicService", "=== Authentication Debug ===")
+            Log.i("MusicService", "AuthenticationManager authenticated: $isAuthenticated")
+            Log.i("MusicService", "NetworkModule authenticated: $networkHasToken")
+            if (currentUser != null) {
+                Log.i("MusicService", "Current user: ${currentUser.username} (${currentUser.email})")
+                Log.i("MusicService", "Server URL: ${currentUser.serverUrl}")
+            } else {
+                Log.i("MusicService", "No current user")
+            }
+            Log.i("MusicService", "Search should work: ${isAuthenticated && networkHasToken}")
+            Log.i("MusicService", "=============================")
+        } catch (e: Exception) {
+            Log.e("MusicService", "Error debugging authentication state", e)
+        }
     }
 
     private fun initializeScrobbleManager() {
@@ -122,22 +162,29 @@ class MusicService : MediaBrowserServiceCompat() {
         // Check if the client is Android Auto
         val isAndroidAuto = rootHints?.getBoolean("android.service.media.extra.RECENT") == true ||
                           clientPackageName == "com.google.android.projection.gearhead" ||
-                          clientPackageName == "com.google.android.gms"
+                          clientPackageName == "com.google.android.gms" ||
+                          clientPackageName.contains("android.auto") ||
+                          clientPackageName.contains("gearhead")
         
-        Log.d("MusicService", "Is Android Auto client: $isAndroidAuto")
+        Log.d("MusicService", "Is Android Auto client: $isAndroidAuto (package: $clientPackageName)")
         
         // Allow all clients to browse the media library
         val rootExtras = Bundle().apply {
             putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
             putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
             putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 2)
+            
             // Add Android Auto specific extras
             if (isAndroidAuto) {
                 putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
                 putInt("android.media.extras.CONTENT_STYLE_GROUP_TITLE_HINT", 1)
+                // Add more Android Auto specific styling hints
+                putInt("android.media.browse.CONTENT_STYLE_LIST_ITEM_HINT_VALUE", 1)
+                putInt("android.media.browse.CONTENT_STYLE_GRID_ITEM_HINT_VALUE", 2)
             }
         }
         
+        Log.d("MusicService", "Returning BrowserRoot with ID: $MEDIA_ROOT_ID")
         return BrowserRoot(MEDIA_ROOT_ID, rootExtras)
     }
 
@@ -149,55 +196,19 @@ class MusicService : MediaBrowserServiceCompat() {
         
         when (parentId) {
             MEDIA_ROOT_ID -> {
-                val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
-                
-                // Add browsable categories with Android Auto optimized icons
-                mediaItems.add(
-                    MediaBrowserCompat.MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId(MEDIA_PLAYLISTS_ID)
-                            .setTitle("Playlists")
-                            .setSubtitle("Browse your playlists")
-                            .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_playlist_music}"))
-                            .build(),
-                        MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-                    )
-                )
-                
-                mediaItems.add(
-                    MediaBrowserCompat.MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId(MEDIA_RECENT_ID)
-                            .setTitle("Recently Played")
-                            .setSubtitle("Your recent music")
-                            .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_history}"))
-                            .build(),
-                        MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-                    )
-                )
-                
-                mediaItems.add(
-                    MediaBrowserCompat.MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId(MEDIA_FAVORITES_ID)
-                            .setTitle("Favorites")
-                            .setSubtitle("Your starred music")
-                            .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_star}"))
-                            .build(),
-                        MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-                    )
-                )
-                
-                result.sendResult(mediaItems)
+                loadRootItems(result)
             }
             
             MEDIA_PLAYLISTS_ID -> {
-                // Return current playlist songs as playable items
-                val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
-                playlistManager.currentPlaylist.value.forEach { song ->
-                    mediaItems.add(createMediaItem(song))
-                }
-                result.sendResult(mediaItems)
+                loadPlaylists(result)
+            }
+            
+            MEDIA_QUEUE_ID -> {
+                loadCurrentQueue(result)
+            }
+            
+            "no_content" -> {
+                loadHelpInfo(result)
             }
             
             MEDIA_RECENT_ID, MEDIA_FAVORITES_ID -> {
@@ -206,7 +217,278 @@ class MusicService : MediaBrowserServiceCompat() {
             }
             
             else -> {
-                result.sendResult(mutableListOf())
+                // Check if it's a playlist ID (they start with "playlist_")
+                if (parentId.startsWith("playlist_")) {
+                    val playlistId = parentId.removePrefix("playlist_")
+                    loadPlaylistSongs(playlistId, result)
+                } else {
+                    Log.d("MusicService", "Unknown parentId: $parentId, returning empty list")
+                    result.sendResult(mutableListOf())
+                }
+            }
+        }
+    }
+
+    private fun loadRootItems(result: Result<List<MediaBrowserCompat.MediaItem>>) {
+        val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+        
+        // Add Playlists category
+        mediaItems.add(
+            MediaBrowserCompat.MediaItem(
+                MediaDescriptionCompat.Builder()
+                    .setMediaId(MEDIA_PLAYLISTS_ID)
+                    .setTitle("Playlists")
+                    .setSubtitle("Browse your playlists")
+                    .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_playlist_music}"))
+                    .build(),
+                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+            )
+        )
+        
+        // Add Current Queue category
+        mediaItems.add(
+            MediaBrowserCompat.MediaItem(
+                MediaDescriptionCompat.Builder()
+                    .setMediaId(MEDIA_QUEUE_ID)
+                    .setTitle("Current Queue")
+                    .setSubtitle("Currently playing songs")
+                    .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_library_music}"))
+                    .build(),
+                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+            )
+        )
+        
+        Log.d("MusicService", "Returning ${mediaItems.size} root items for Android Auto")
+        result.sendResult(mediaItems)
+    }
+
+    private fun loadPlaylists(result: Result<List<MediaBrowserCompat.MediaItem>>) {
+        // Check authentication first
+        val authToken = NetworkModule.getAuthToken()
+        if (authToken.isNullOrEmpty()) {
+            Log.w("MusicService", "No auth token available for playlists")
+            val errorItems = listOf(
+                MediaBrowserCompat.MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId("auth_required")
+                        .setTitle("Login Required")
+                        .setSubtitle("Please login to the app first")
+                        .build(),
+                    MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                )
+            )
+            result.sendResult(errorItems)
+            return
+        }
+
+        // Detach result for async operation
+        result.detach()
+        
+        // Fetch playlists from API
+        serviceScope.launch {
+            try {
+                Log.d("MusicService", "Fetching playlists from API")
+                val playlists = fetchUserPlaylists()
+                
+                val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+                
+                if (playlists.isNotEmpty()) {
+                    playlists.forEach { playlist ->
+                        mediaItems.add(
+                            MediaBrowserCompat.MediaItem(
+                                MediaDescriptionCompat.Builder()
+                                    .setMediaId("playlist_${playlist.id}")
+                                    .setTitle(playlist.name)
+                                    .setSubtitle("${playlist.songCount} songs")
+                                    .setDescription(playlist.description ?: "")
+                                    .setIconUri(android.net.Uri.parse(playlist.imageUrl ?: "android.resource://$packageName/${R.drawable.ic_playlist_music}"))
+                                    .build(),
+                                MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+                            )
+                        )
+                    }
+                } else {
+                    mediaItems.add(
+                        MediaBrowserCompat.MediaItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId("no_playlists")
+                                .setTitle("No Playlists Found")
+                                .setSubtitle("Create playlists in the app to see them here")
+                                .build(),
+                            MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                        )
+                    )
+                }
+                
+                Log.d("MusicService", "Returning ${mediaItems.size} playlists for Android Auto")
+                result.sendResult(mediaItems)
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Error fetching playlists", e)
+                val errorItems = listOf(
+                    MediaBrowserCompat.MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId("playlists_error")
+                            .setTitle("Error Loading Playlists")
+                            .setSubtitle("Unable to load playlists: ${e.message}")
+                            .build(),
+                        MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                    )
+                )
+                result.sendResult(errorItems)
+            }
+        }
+    }
+
+    private fun loadCurrentQueue(result: Result<List<MediaBrowserCompat.MediaItem>>) {
+        val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+        
+        // First try current queue, then playlist manager
+        val songs = if (queueManager.currentQueue.value.isNotEmpty()) {
+            queueManager.currentQueue.value
+        } else {
+            playlistManager.currentPlaylist.value
+        }
+        
+        Log.d("MusicService", "Loading ${songs.size} songs for current queue")
+        
+        if (songs.isNotEmpty()) {
+            songs.forEach { song ->
+                mediaItems.add(createMediaItem(song))
+            }
+        } else {
+            // Show "no content" message instead of empty list
+            mediaItems.add(
+                MediaBrowserCompat.MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId("empty_queue")
+                        .setTitle("Queue is Empty")
+                        .setSubtitle("Play songs from the app to populate your queue")
+                        .build(),
+                    MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                )
+            )
+        }
+        
+        result.sendResult(mediaItems)
+    }
+
+    private fun loadHelpInfo(result: Result<List<MediaBrowserCompat.MediaItem>>) {
+        val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+        
+        mediaItems.add(
+            MediaBrowserCompat.MediaItem(
+                MediaDescriptionCompat.Builder()
+                    .setMediaId("help_info")
+                    .setTitle("How to Add Music")
+                    .setSubtitle("Open the Melodee app and browse playlists or search for songs")
+                    .build(),
+                MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+            )
+        )
+        
+        Log.d("MusicService", "Returning help information")
+        result.sendResult(mediaItems)
+    }
+
+    private fun loadPlaylistSongs(playlistId: String, result: Result<List<MediaBrowserCompat.MediaItem>>) {
+        // Check authentication first
+        val authToken = NetworkModule.getAuthToken()
+        if (authToken.isNullOrEmpty()) {
+            Log.w("MusicService", "No auth token available for playlist songs")
+            val errorItems = listOf(
+                MediaBrowserCompat.MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId("auth_required")
+                        .setTitle("Login Required")
+                        .setSubtitle("Please login to the app first")
+                        .build(),
+                    MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                )
+            )
+            result.sendResult(errorItems)
+            return
+        }
+
+        // Detach result for async operation
+        result.detach()
+        
+        // Fetch playlist songs from API
+        serviceScope.launch {
+            try {
+                Log.d("MusicService", "Fetching songs for playlist: $playlistId")
+                val songs = fetchPlaylistSongs(playlistId)
+                
+                val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+                
+                if (songs.isNotEmpty()) {
+                    songs.forEach { song ->
+                        mediaItems.add(createMediaItem(song))
+                    }
+                } else {
+                    mediaItems.add(
+                        MediaBrowserCompat.MediaItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId("empty_playlist")
+                                .setTitle("Playlist is Empty")
+                                .setSubtitle("Add songs to this playlist in the app")
+                                .build(),
+                            MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                        )
+                    )
+                }
+                
+                Log.d("MusicService", "Returning ${mediaItems.size} songs for playlist $playlistId")
+                result.sendResult(mediaItems)
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Error fetching playlist songs", e)
+                val errorItems = listOf(
+                    MediaBrowserCompat.MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId("playlist_error")
+                            .setTitle("Error Loading Playlist")
+                            .setSubtitle("Unable to load playlist: ${e.message}")
+                            .build(),
+                        MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                    )
+                )
+                result.sendResult(errorItems)
+            }
+        }
+    }
+
+    // API methods for fetching playlists and songs
+    private suspend fun fetchUserPlaylists(): List<Playlist> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d("MusicService", "Fetching user playlists from API")
+                val musicApi = NetworkModule.getMusicApi()
+                val playlistsResponse = musicApi.getPlaylists(1, 50) // Get first 50 playlists
+                
+                Log.d("MusicService", "API returned ${playlistsResponse.data.size} playlists")
+                return@withContext playlistsResponse.data
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Failed to fetch playlists", e)
+                throw e
+            }
+        }
+    }
+
+    private suspend fun fetchPlaylistSongs(playlistId: String): List<Song> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d("MusicService", "Fetching songs for playlist: $playlistId")
+                val musicApi = NetworkModule.getMusicApi()
+                val songsResponse = musicApi.getPlaylistSongs(playlistId, 1, 100) // Get first 100 songs
+                
+                Log.d("MusicService", "API returned ${songsResponse.data.size} songs for playlist $playlistId")
+                return@withContext songsResponse.data
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Failed to fetch playlist songs for $playlistId", e)
+                throw e
             }
         }
     }
@@ -216,27 +498,114 @@ class MusicService : MediaBrowserServiceCompat() {
         extras: Bundle?,
         result: Result<List<MediaBrowserCompat.MediaItem>>
     ) {
-        Log.d("MusicService", "onSearch called with query: $query")
+        Log.d("MusicService", "Android Auto onSearch called with query: '$query'")
+        Log.d("MusicService", "Extras: $extras")
         
-        // For now, return a subset of current playlist that matches the query
-        // In a real implementation, you'd search your music library
-        val searchResults = mutableListOf<MediaBrowserCompat.MediaItem>()
-        
-        if (query.isNotEmpty()) {
-            playlistManager.currentPlaylist.value
-                .filter { song ->
-                    song.title.contains(query, ignoreCase = true) ||
-                    song.artist.name.contains(query, ignoreCase = true) ||
-                    song.album.name.contains(query, ignoreCase = true)
-                }
-                .take(10) // Limit results for Android Auto
-                .forEach { song ->
-                    searchResults.add(createMediaItem(song))
-                }
+        if (query.isEmpty()) {
+            Log.d("MusicService", "Empty query, returning empty results")
+            result.sendResult(mutableListOf())
+            return
         }
+
+        // Detach the result to perform async API call
+        result.detach()
         
-        Log.d("MusicService", "Search returned ${searchResults.size} results")
-        result.sendResult(searchResults)
+        // Perform API search in background
+        serviceScope.launch {
+            try {
+                Log.d("MusicService", "Starting async API search for: '$query'")
+                val searchResults = performApiSearch(query)
+                
+                // Send results back to Android Auto
+                result.sendResult(searchResults)
+                Log.i("MusicService", "Android Auto search completed: ${searchResults.size} results for '$query'")
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Error performing API search for '$query'", e)
+                
+                // Send error result with detailed info
+                val errorResults = mutableListOf<MediaBrowserCompat.MediaItem>()
+                errorResults.add(
+                    MediaBrowserCompat.MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId("search_error")
+                            .setTitle("Search Error")
+                            .setSubtitle("API Error: ${e.message}")
+                            .setDescription("Failed to search for '$query'. Check network and authentication.")
+                            .build(),
+                        MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                    )
+                )
+                result.sendResult(errorResults)
+            }
+        }
+    }
+
+    private suspend fun performApiSearch(query: String): List<MediaBrowserCompat.MediaItem> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d("MusicService", "Starting API search for: '$query'")
+                
+                // Check if we have authentication
+                val authToken = NetworkModule.getAuthToken()
+                Log.d("MusicService", "Auth token available: ${!authToken.isNullOrEmpty()}")
+                
+                if (authToken.isNullOrEmpty()) {
+                    Log.w("MusicService", "No auth token available for search")
+                    return@withContext listOf(
+                        MediaBrowserCompat.MediaItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId("auth_required")
+                                .setTitle("Login Required")
+                                .setSubtitle("Please login to the app first to search")
+                                .setDescription("Open the Melodee app and login to enable search")
+                                .build(),
+                            MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                        )
+                    )
+                }
+
+                Log.d("MusicService", "Making API search call")
+                // Perform API search
+                val musicApi = NetworkModule.getMusicApi()
+                val searchResponse = musicApi.searchSongs(query, 1, 10) // Search first page, limit 10 results
+                
+                Log.d("MusicService", "API search response received: ${searchResponse.data.size} songs")
+                
+                val searchResults = mutableListOf<MediaBrowserCompat.MediaItem>()
+                
+                if (searchResponse.data.isNotEmpty()) {
+                    Log.i("MusicService", "API search found ${searchResponse.data.size} songs for '$query'")
+                    
+                    searchResponse.data.forEach { song ->
+                        searchResults.add(createMediaItem(song))
+                        Log.d("MusicService", "Added song: ${song.title} by ${song.artist.name}")
+                    }
+                } else {
+                    Log.i("MusicService", "API search found no results for: '$query'")
+                    searchResults.add(
+                        MediaBrowserCompat.MediaItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId("no_results")
+                                .setTitle("No Results Found")
+                                .setSubtitle("No songs found for \"$query\"")
+                                .setDescription("Try a different search term or check your spelling")
+                                .build(),
+                            MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                        )
+                    )
+                }
+                
+                Log.d("MusicService", "Returning ${searchResults.size} search results")
+                return@withContext searchResults
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "API search failed for '$query'", e)
+                Log.e("MusicService", "Exception type: ${e.javaClass.simpleName}")
+                Log.e("MusicService", "Exception message: ${e.message}")
+                throw e
+            }
+        }
     }
 
     private fun createMediaItem(song: Song): MediaBrowserCompat.MediaItem {
@@ -829,6 +1198,13 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Setting up MediaSession")
         mediaSession = MediaSessionCompat(this, "MelodeeMediaSession")
         Log.d("MusicService", "MediaSession created: ${mediaSession?.sessionToken}")
+        
+        // Set flags for Android Auto compatibility
+        mediaSession?.setFlags(
+            MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+            MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+        )
+        
         mediaSession?.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
                 Log.d("MusicService", "MediaSession onPlay")
@@ -900,11 +1276,37 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.d("MusicService", "MediaSession onPlayFromMediaId: $mediaId")
                 // Handle playing specific songs by media ID
                 mediaId?.let { id ->
-                    val song = playlistManager.currentPlaylist.value.find { it.id.toString() == id }
+                    if (id.startsWith("no_") || id.startsWith("help_") || id.startsWith("empty_") || 
+                        id.startsWith("auth_") || id.startsWith("playlists_") || id.startsWith("playlist_")) {
+                        // Handle informational content or non-playable items
+                        Log.d("MusicService", "User selected non-playable item: $id")
+                        return@let
+                    }
+                    
+                    // First try to find the song in current content
+                    val queueSongs = queueManager.currentQueue.value
+                    val playlistSongs = playlistManager.currentPlaylist.value
+                    val allSongs = (queueSongs + playlistSongs).distinctBy { it.id }
+                    
+                    val song = allSongs.find { it.id.toString() == id }
                     if (song != null) {
-                        queueManager.addToQueue(song)
-                        playlistManager.playSong(song)
-                        playSong(song)
+                        Log.d("MusicService", "Found song in local content: ${song.title}")
+                        // If the song is from a different playlist context, update the queue
+                        val fromPlaylist = extras?.getString("from_playlist")
+                        if (fromPlaylist != null) {
+                            Log.d("MusicService", "Playing song from playlist context: $fromPlaylist")
+                            currentPlaybackContext = PlaybackContext.PLAYLIST
+                            // Load the entire playlist if needed
+                            loadPlaylistAndPlay(fromPlaylist, song)
+                        } else {
+                            queueManager.addToQueue(song)
+                            playlistManager.playSong(song)
+                            playSong(song)
+                        }
+                    } else {
+                        Log.w("MusicService", "Song with mediaId $id not found in local content")
+                        // Try to fetch and play the song from API (for search results or new playlists)
+                        fetchAndPlaySong(id)
                     }
                 }
             }
@@ -938,6 +1340,53 @@ class MusicService : MediaBrowserServiceCompat() {
         sessionToken = mediaSession?.sessionToken
         Log.d("MusicService", "MediaSession setup complete. Token: $sessionToken")
         Log.d("MusicService", "MediaSession active: ${mediaSession?.isActive}")
+        Log.d("MusicService", "MediaSession flags: ${mediaSession?.controller?.flags}")
+    }
+
+    // Helper methods for playlist handling
+    private fun loadPlaylistAndPlay(playlistId: String, songToPlay: Song) {
+        serviceScope.launch {
+            try {
+                Log.d("MusicService", "Loading playlist $playlistId and playing song: ${songToPlay.title}")
+                val playlistSongs = fetchPlaylistSongs(playlistId)
+                
+                if (playlistSongs.isNotEmpty()) {
+                    val startIndex = playlistSongs.indexOfFirst { it.id == songToPlay.id }
+                    
+                    currentPlaybackContext = PlaybackContext.PLAYLIST
+                    queueManager.setQueue(playlistSongs, maxOf(0, startIndex))
+                    playlistManager.setPlaylist(playlistSongs, maxOf(0, startIndex))
+                    playSong(songToPlay)
+                    
+                    Log.d("MusicService", "Loaded playlist with ${playlistSongs.size} songs, playing index: $startIndex")
+                } else {
+                    Log.w("MusicService", "Playlist $playlistId is empty")
+                    // Just play the single song
+                    queueManager.addToQueue(songToPlay)
+                    playlistManager.playSong(songToPlay)
+                    playSong(songToPlay)
+                }
+            } catch (e: Exception) {
+                Log.e("MusicService", "Failed to load playlist $playlistId", e)
+                // Fallback to playing just the single song
+                queueManager.addToQueue(songToPlay)
+                playlistManager.playSong(songToPlay)
+                playSong(songToPlay)
+            }
+        }
+    }
+
+    private fun fetchAndPlaySong(songId: String) {
+        serviceScope.launch {
+            try {
+                Log.d("MusicService", "Attempting to fetch and play song: $songId")
+                // For now, we'll just log this - in a full implementation, 
+                // you might want to have a getSongById API endpoint
+                Log.w("MusicService", "Cannot play song $songId - not found in local content and no getSongById API")
+            } catch (e: Exception) {
+                Log.e("MusicService", "Failed to fetch and play song $songId", e)
+            }
+        }
     }
 
     private fun startPositionUpdates() {
@@ -959,5 +1408,37 @@ class MusicService : MediaBrowserServiceCompat() {
     private fun stopPositionUpdates() {
         positionUpdateJob?.cancel()
         positionUpdateJob = null
+    }
+
+    private fun populateTestContentForAndroidAuto() {
+        Log.d("MusicService", "Populating test content for Android Auto debugging")
+        
+        // Check if we have any content
+        val hasQueueContent = queueManager.currentQueue.value.isNotEmpty()
+        val hasPlaylistContent = playlistManager.currentPlaylist.value.isNotEmpty()
+        
+        Log.d("MusicService", "Current content status - Queue: $hasQueueContent, Playlist: $hasPlaylistContent")
+        
+        if (!hasQueueContent && !hasPlaylistContent) {
+            Log.d("MusicService", "No content available - Android Auto will show 'No Music Available' message")
+        } else {
+            Log.d("MusicService", "Content available - Queue: ${queueManager.currentQueue.value.size}, Playlist: ${playlistManager.currentPlaylist.value.size}")
+        }
+    }
+
+    // Debug method - can be called during development
+    fun testSearchFunctionality(query: String = "test") {
+        Log.i("MusicService", "=== Testing Search Functionality ===")
+        serviceScope.launch {
+            try {
+                val results = performApiSearch(query)
+                Log.i("MusicService", "Test search returned ${results.size} results")
+                results.forEach { item ->
+                    Log.i("MusicService", "Result: ${item.description?.title} - ${item.description?.subtitle}")
+                }
+            } catch (e: Exception) {
+                Log.e("MusicService", "Test search failed", e)
+            }
+        }
     }
 }
