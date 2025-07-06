@@ -28,7 +28,9 @@ import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.StarBorder
 import android.media.session.PlaybackState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -462,7 +464,7 @@ private fun SongItem(
             )
         }
 
-        // Favorite heart icon
+        // Favorite star icon
         IconButton(
             onClick = {
                 val newStarredValue = !isStarred
@@ -472,9 +474,9 @@ private fun SongItem(
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
-                imageVector = if (isStarred) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                imageVector = if (isStarred) Icons.Filled.Star else Icons.Outlined.StarBorder,
                 contentDescription = if (isStarred) "Remove from favorites" else "Add to favorites",
-                tint = if (isStarred) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(28.dp)
             )
         }

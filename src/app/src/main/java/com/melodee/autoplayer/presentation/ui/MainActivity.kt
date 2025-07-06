@@ -99,12 +99,11 @@ class MainActivity : ComponentActivity() {
             homeViewModel.refreshPlaylists()
         }
         
-        // Start the MusicService to ensure it's available for Android Auto
-        Log.d("MainActivity", "Starting MusicService for Android Auto compatibility")
+        // Bind to the MusicService (this will start it if needed)
+        Log.d("MainActivity", "Binding to MusicService for Android Auto compatibility")
         val serviceIntent = Intent(this, MusicService::class.java)
-        startService(serviceIntent)
         
-        // Bind to the service
+        // Only bind - don't start the service explicitly to avoid background service restrictions
         bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
         
         // Initialize MediaBrowser for testing

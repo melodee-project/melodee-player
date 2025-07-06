@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +18,7 @@ import com.melodee.autoplayer.domain.model.Song
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -303,7 +305,7 @@ private fun SongItem(
             )
         }
 
-        // Favorite heart icon
+        // Favorite star icon
         IconButton(
             onClick = {
                 val newStarredValue = !isStarred
@@ -313,9 +315,9 @@ private fun SongItem(
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
-                imageVector = if (isStarred) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                imageVector = if (isStarred) Icons.Filled.Star else Icons.Outlined.StarBorder,
                 contentDescription = if (isStarred) "Remove from favorites" else "Add to favorites",
-                tint = if (isStarred) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(28.dp)
             )
         }

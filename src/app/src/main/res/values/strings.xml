@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Melodee Player</string>
+    <string name="app_name">Melodee</string>
     <string name="app_name_short">Melodee</string>
+    <string name="app_name_full">Melodee Player</string>
     <string name="media_session_tag">Melodee</string>
     
     <!-- Login Screen -->

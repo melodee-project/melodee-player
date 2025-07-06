@@ -1399,6 +1399,13 @@ class MusicService : MediaBrowserServiceCompat() {
         mediaSession = MediaSessionCompat(this, "Melodee")
         Log.d("MusicService", "MediaSession created: ${mediaSession?.sessionToken}")
         
+        // Log MediaSession details for debugging
+        Log.i("MusicService", "=== MEDIASESSION DEBUG INFO ===")
+        Log.i("MusicService", "Session tag: Melodee")
+        Log.i("MusicService", "Package name: $packageName")
+        Log.i("MusicService", "Service label: Melodee")
+        Log.i("MusicService", "App name: Melodee Player")
+        
         // Set flags for Android Auto compatibility
         mediaSession?.setFlags(
             MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
@@ -1478,8 +1485,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 searchResultsCache = emptyList()
                 
                 if (query.isNullOrBlank()) {
-                    Log.d("MusicService", "Empty search query, resuming current playback")
-                    resumePlayback()
+                    Log.d("MusicService", "Empty search query, not resuming playback")
                     return
                 }
                 
@@ -1665,8 +1671,14 @@ class MusicService : MediaBrowserServiceCompat() {
         val appMetadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "Melodee")
             .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "Music Player")
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, "Melodee")
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Melodee")
             .build()
         mediaSession?.setMetadata(appMetadata)
+        
+        // Set queue title for Android Auto recognition
+        mediaSession?.setQueueTitle("Melodee")
+        
         mediaSession?.isActive = true
         
         // Set the session token for MediaBrowserServiceCompat
