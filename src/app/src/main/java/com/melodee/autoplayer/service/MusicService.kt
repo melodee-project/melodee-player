@@ -53,6 +53,8 @@ class MusicService : MediaBrowserServiceCompat() {
     }
     
     private var currentPlaybackContext = PlaybackContext.SINGLE_SONG
+    private var currentBrowsingPlaylistId: String? = null  // Track which playlist is currently being browsed
+    private var currentBrowsingPlaylistSongs: List<Song> = emptyList()  // Cache songs from the browsed playlist
 
     companion object {
         private const val NOTIFICATION_ID = 1
@@ -196,14 +198,23 @@ class MusicService : MediaBrowserServiceCompat() {
         
         when (parentId) {
             MEDIA_ROOT_ID -> {
+                // Clear browsing playlist context when returning to root
+                currentBrowsingPlaylistId = null
+                currentBrowsingPlaylistSongs = emptyList()
                 loadRootItems(result)
             }
             
             MEDIA_PLAYLISTS_ID -> {
+                // Clear browsing playlist context when browsing playlists list
+                currentBrowsingPlaylistId = null
+                currentBrowsingPlaylistSongs = emptyList()
                 loadPlaylists(result)
             }
             
             MEDIA_QUEUE_ID -> {
+                // Clear browsing playlist context when browsing queue
+                currentBrowsingPlaylistId = null
+                currentBrowsingPlaylistSongs = emptyList()
                 loadCurrentQueue(result)
             }
             
@@ -417,13 +428,18 @@ class MusicService : MediaBrowserServiceCompat() {
         serviceScope.launch {
             try {
                 Log.d("MusicService", "Fetching songs for playlist: $playlistId")
+                // Set the current browsing playlist ID
+                currentBrowsingPlaylistId = playlistId
                 val songs = fetchPlaylistSongs(playlistId)
+                
+                // Cache the songs for later use in onPlayFromMediaId
+                currentBrowsingPlaylistSongs = songs
                 
                 val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
                 
                 if (songs.isNotEmpty()) {
                     songs.forEach { song ->
-                        mediaItems.add(createMediaItem(song))
+                        mediaItems.add(createMediaItem(song, playlistId))
                     }
                 } else {
                     mediaItems.add(
@@ -608,15 +624,24 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun createMediaItem(song: Song): MediaBrowserCompat.MediaItem {
+    private fun createMediaItem(song: Song, playlistId: String? = null): MediaBrowserCompat.MediaItem {
+        val builder = MediaDescriptionCompat.Builder()
+            .setMediaId(song.id.toString())
+            .setTitle(song.title)
+            .setSubtitle(song.artist.name)
+            .setDescription(song.album.name)
+            .setIconUri(android.net.Uri.parse(song.thumbnailUrl))
+        
+        // Add playlist context if provided
+        if (playlistId != null) {
+            val extras = Bundle().apply {
+                putString("from_playlist", playlistId)
+            }
+            builder.setExtras(extras)
+        }
+        
         return MediaBrowserCompat.MediaItem(
-            MediaDescriptionCompat.Builder()
-                .setMediaId(song.id.toString())
-                .setTitle(song.title)
-                .setSubtitle(song.artist.name)
-                .setDescription(song.album.name)
-                .setIconUri(android.net.Uri.parse(song.thumbnailUrl))
-                .build(),
+            builder.build(),
             MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
         )
     }
@@ -1253,6 +1278,9 @@ class MusicService : MediaBrowserServiceCompat() {
 
             override fun onPlayFromSearch(query: String?, extras: Bundle?) {
                 Log.d("MusicService", "MediaSession onPlayFromSearch: $query")
+                // Clear browsing playlist context when playing from search
+                currentBrowsingPlaylistId = null
+                currentBrowsingPlaylistSongs = emptyList()
                 // Handle voice commands like "play next song"
                 when {
                     query?.contains("next", ignoreCase = true) == true -> {
@@ -1274,6 +1302,8 @@ class MusicService : MediaBrowserServiceCompat() {
 
             override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
                 Log.d("MusicService", "MediaSession onPlayFromMediaId: $mediaId")
+                Log.d("MusicService", "Current browsing playlist ID: $currentBrowsingPlaylistId")
+                Log.d("MusicService", "Extras: $extras")
                 // Handle playing specific songs by media ID
                 mediaId?.let { id ->
                     if (id.startsWith("no_") || id.startsWith("help_") || id.startsWith("empty_") || 
@@ -1283,21 +1313,21 @@ class MusicService : MediaBrowserServiceCompat() {
                         return@let
                     }
                     
-                    // First try to find the song in current content
+                    // First try to find the song in current browsing content
                     val queueSongs = queueManager.currentQueue.value
                     val playlistSongs = playlistManager.currentPlaylist.value
-                    val allSongs = (queueSongs + playlistSongs).distinctBy { it.id }
+                    val browsingPlaylistSongs = currentBrowsingPlaylistSongs
+                    val allSongs = (queueSongs + playlistSongs + browsingPlaylistSongs).distinctBy { it.id }
                     
                     val song = allSongs.find { it.id.toString() == id }
                     if (song != null) {
                         Log.d("MusicService", "Found song in local content: ${song.title}")
-                        // If the song is from a different playlist context, update the queue
-                        val fromPlaylist = extras?.getString("from_playlist")
-                        if (fromPlaylist != null) {
-                            Log.d("MusicService", "Playing song from playlist context: $fromPlaylist")
+                        // Check if we're browsing a playlist context
+                        if (currentBrowsingPlaylistId != null) {
+                            Log.d("MusicService", "Playing song from playlist context: $currentBrowsingPlaylistId")
                             currentPlaybackContext = PlaybackContext.PLAYLIST
                             // Load the entire playlist if needed
-                            loadPlaylistAndPlay(fromPlaylist, song)
+                            loadPlaylistAndPlay(currentBrowsingPlaylistId!!, song)
                         } else {
                             queueManager.addToQueue(song)
                             playlistManager.playSong(song)
