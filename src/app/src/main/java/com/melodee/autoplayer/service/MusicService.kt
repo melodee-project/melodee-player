@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
 import android.os.Bundle
@@ -44,6 +47,11 @@ class MusicService : MediaBrowserServiceCompat() {
     private lateinit var authenticationManager: AuthenticationManager
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionUpdateJob: Job? = null
+    
+    // Audio focus management
+    private lateinit var audioManager: AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus = false
 
     // Add playback context tracking
     enum class PlaybackContext {
@@ -104,6 +112,9 @@ class MusicService : MediaBrowserServiceCompat() {
         
         // Debug current state
         debugAuthenticationState()
+        
+        // Initialize audio manager
+        setupAudioManager()
         
         createNotificationChannel()
         setupPlayer()
@@ -748,6 +759,9 @@ class MusicService : MediaBrowserServiceCompat() {
         // Stop position updates
         stopPositionUpdates()
         
+        // Abandon audio focus
+        abandonAudioFocus()
+        
         // Clean up scrobble manager
         scrobbleManager?.destroy()
         scrobbleManager = null
@@ -852,6 +866,12 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Playing song: ${song.title}")
         Log.d("MusicService", "Stream URL: ${song.streamUrl}")
         
+        // Request audio focus before starting playback
+        if (!requestAudioFocus()) {
+            Log.w("MusicService", "Could not gain audio focus, cannot start playback")
+            return
+        }
+        
         // Stop tracking previous song
         currentSong?.let { prevSong ->
             scrobbleManager?.stopTracking(prevSong.id.toString())
@@ -873,6 +893,9 @@ class MusicService : MediaBrowserServiceCompat() {
             currentSong = song
             Log.d("MusicService", "Updated current song")
 
+            // Ensure MediaSession is active and ready
+            mediaSession?.isActive = true
+            
             // Update MediaSession metadata
             updateMediaSessionMetadata(song)
 
@@ -886,7 +909,16 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun setupPlayer() {
         Log.d("MusicService", "Setting up ExoPlayer")
-        player = ExoPlayer.Builder(this).build().apply {
+        
+        // Configure audio attributes for Android Auto compatibility
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
+        
+        player = ExoPlayer.Builder(this)
+            .setAudioAttributes(audioAttributes, true) // Handle audio focus automatically
+            .build().apply {
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     Log.d("MusicService", "Playback state changed: $state")
@@ -1054,6 +1086,13 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun resumePlayback() {
         Log.d("MusicService", "Resuming playback")
+        
+        // Request audio focus before resuming
+        if (!hasAudioFocus && !requestAudioFocus()) {
+            Log.w("MusicService", "Could not gain audio focus for resume")
+            return
+        }
+        
         player?.play()
         updateMediaSessionPlaybackState()
     }
@@ -1062,6 +1101,10 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Stopping playback")
         player?.stop()
         currentSong = null
+        
+        // Abandon audio focus when stopping playback
+        abandonAudioFocus()
+        
         updateMediaSessionPlaybackState()
         
         // Stop foreground service and remove notification
@@ -1478,4 +1521,88 @@ class MusicService : MediaBrowserServiceCompat() {
             }
         }
     }
+
+    private fun setupAudioManager() {
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        Log.d("MusicService", "AudioManager initialized")
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        Log.d("MusicService", "Requesting audio focus")
+        
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(audioAttributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+
+            val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            Log.d("MusicService", "Audio focus request result: $result, hasAudioFocus: $hasAudioFocus")
+            hasAudioFocus
+        } else {
+            @Suppress("DEPRECATION")
+            val result = audioManager.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            Log.d("MusicService", "Audio focus request result (legacy): $result, hasAudioFocus: $hasAudioFocus")
+            hasAudioFocus
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        Log.d("MusicService", "Abandoning audio focus")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { request ->
+                audioManager.abandonAudioFocusRequest(request)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(audioFocusChangeListener)
+        }
+        hasAudioFocus = false
+    }
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        Log.d("MusicService", "Audio focus changed: $focusChange")
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                Log.d("MusicService", "Audio focus gained")
+                hasAudioFocus = true
+                // Resume playback if it was paused due to focus loss
+                if (currentSong != null && player?.isPlaying == false) {
+                    Log.d("MusicService", "Resuming playback after gaining audio focus")
+                    resumePlayback()
+                }
+                // Restore volume if it was ducked
+                player?.volume = 1.0f
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                Log.d("MusicService", "Audio focus lost permanently")
+                hasAudioFocus = false
+                pausePlayback()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                Log.d("MusicService", "Audio focus lost temporarily")
+                hasAudioFocus = false
+                pausePlayback()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                Log.d("MusicService", "Audio focus lost temporarily - ducking")
+                // Lower the volume instead of pausing
+                player?.volume = 0.2f
+            }
+        }
+    }
+
+    // ...existing code...
 }
