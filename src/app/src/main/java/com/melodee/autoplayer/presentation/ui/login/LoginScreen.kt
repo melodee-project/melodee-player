@@ -23,6 +23,7 @@ import android.content.pm.PackageManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
+import com.melodee.autoplayer.util.UrlParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +31,7 @@ fun LoginScreen(
     viewModel: LoginViewModel,
     onLoginSuccess: (AuthResponse) -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
+    var emailOrUsername by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var serverUrl by remember { mutableStateOf(viewModel.serverUrl) }
     
@@ -52,7 +53,7 @@ fun LoginScreen(
     // Function to handle login
     val handleLogin = {
         keyboardController?.hide()
-        viewModel.login(email, password, serverUrl)
+        viewModel.login(emailOrUsername, password, serverUrl)
     }
 
     LaunchedEffect(loginState) {
@@ -105,13 +106,21 @@ fun LoginScreen(
             placeholder = { Text("https://music.example.com") },
             supportingText = { 
                 if (serverUrl.isNotBlank()) {
-                    // Show how the URL will be normalized
-                    val normalizedUrl = normalizeUrl(serverUrl)
-                    Text(
-                        text = "Will use: $normalizedUrl",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    // Show how the URL will be normalized using the new parser
+                    val normalizedUrl = UrlParser.normalizeServerUrl(serverUrl)
+                    if (normalizedUrl.isNotBlank()) {
+                        Text(
+                            text = "Will use: $normalizedUrl",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Text(
+                            text = "Invalid URL format",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 } else {
                     Text(
                         text = "Enter your server URL (with or without /api/v1/)",
@@ -132,15 +141,16 @@ fun LoginScreen(
         )
 
         OutlinedTextField(
-            value = email,
+            value = emailOrUsername,
             onValueChange = { 
-                email = it
+                emailOrUsername = it
                 // Clear error when user starts typing
                 if (loginState is LoginState.Error) {
                     viewModel.clearError()
                 }
             },
-            label = { Text(stringResource(R.string.email)) },
+            label = { Text("Email or Username") },
+            placeholder = { Text("Enter your email or username") },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
@@ -148,7 +158,7 @@ fun LoginScreen(
             enabled = !isLoading,
             isError = loginState is LoginState.Error,
             keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
+                keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Next
             )
         )
@@ -229,25 +239,4 @@ fun LoginScreen(
     }
 }
 
-// Helper function to normalize URL for preview (matches LoginViewModel logic)
-private fun normalizeUrl(inputUrl: String): String {
-    var url = inputUrl.trim()
-    
-    // Ensure the URL has a protocol
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        url = "https://$url"
-    }
-    
-    // Remove any trailing slashes
-    url = url.trimEnd('/')
-    
-    // Check if the URL already contains the API path
-    return if (url.contains("/api/v1")) {
-        // Remove any existing /api/v1 path and rebuild it properly
-        val baseUrl = url.substringBefore("/api/v1")
-        "$baseUrl/api/v1/"
-    } else {
-        // Add the API path
-        "$url/api/v1/"
-    }
-} 
+// Note: URL normalization is now handled by UrlParser.normalizeServerUrl() 

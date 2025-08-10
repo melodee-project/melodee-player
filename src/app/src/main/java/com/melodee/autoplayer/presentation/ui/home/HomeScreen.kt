@@ -183,32 +183,12 @@ fun HomeScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        text = "Home",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.clearQueue() }) {
-                        Icon(
-                            Icons.Filled.Clear,
-                            contentDescription = "Clear Queue",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            )
-        }
     ) { paddingValues ->
         // Mobile layout
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
             ) {
                 // User header
                 user?.let { currentUser ->

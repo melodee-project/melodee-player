@@ -22,9 +22,15 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
     private val api: MusicApi
         get() = NetworkModule.getMusicApi()
 
-    fun login(email: String, password: String): Flow<AuthResponse> = flow {
+    fun login(emailOrUsername: String, password: String): Flow<AuthResponse> = flow {
         try {
-            val response = api.login(mapOf("email" to email, "password" to password))
+            // Determine if input is email or username based on presence of @ symbol
+            val loginMap = if (emailOrUsername.contains("@")) {
+                mapOf("email" to emailOrUsername, "password" to password)
+            } else {
+                mapOf("userName" to emailOrUsername, "password" to password)
+            }
+            val response = api.login(loginMap)
             NetworkModule.setAuthToken(response.token)
             emit(response)
         } catch (e: HttpException) {

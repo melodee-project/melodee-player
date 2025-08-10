@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.io.IOException
+import com.melodee.autoplayer.util.UrlParser
 
 sealed class LoginState {
     object Initial : LoginState()
@@ -33,14 +34,14 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    fun login(email: String, password: String, serverUrl: String) {
-        if (email.isBlank() || password.isBlank() || serverUrl.isBlank()) {
+    fun login(emailOrUsername: String, password: String, serverUrl: String) {
+        if (emailOrUsername.isBlank() || password.isBlank() || serverUrl.isBlank()) {
             _loginState.value = LoginState.Error("Please fill in all fields")
             return
         }
 
-        // Normalize the server URL
-        val normalizedUrl = normalizeServerUrl(serverUrl)
+        // Normalize the server URL using the new parser
+        val normalizedUrl = UrlParser.normalizeServerUrl(serverUrl)
 
         this.serverUrl = normalizedUrl
         settingsManager.serverUrl = normalizedUrl
@@ -50,7 +51,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                repository?.login(email, password)
+                repository?.login(emailOrUsername, password)
                     ?.catch { e ->
                         Log.e("LoginViewModel", "Login error caught in flow", e)
                         _loginState.value = LoginState.Error(e.message ?: "An error occurred")
@@ -80,35 +81,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun normalizeServerUrl(inputUrl: String): String {
-        var url = inputUrl.trim()
-        Log.d("LoginViewModel", "Input URL: '$inputUrl'")
-        Log.d("LoginViewModel", "Trimmed URL: '$url'")
-        
-        // Ensure the URL has a protocol
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "https://$url"
-            Log.d("LoginViewModel", "Added protocol: '$url'")
-        }
-        
-        // Remove any trailing slashes
-        url = url.trimEnd('/')
-        Log.d("LoginViewModel", "Removed trailing slashes: '$url'")
-        
-        // Check if the URL already contains the API path
-        if (url.contains("/api/v1")) {
-            // Remove any existing /api/v1 path and rebuild it properly
-            val baseUrl = url.substringBefore("/api/v1")
-            val normalizedUrl = "$baseUrl/api/v1/"
-            Log.d("LoginViewModel", "Found existing /api/v1, normalized to: '$normalizedUrl'")
-            return normalizedUrl
-        } else {
-            // Add the API path
-            val normalizedUrl = "$url/api/v1/"
-            Log.d("LoginViewModel", "Added /api/v1/ path: '$normalizedUrl'")
-            return normalizedUrl
-        }
-    }
+    // URL normalization is now handled by UrlParser.normalizeServerUrl()
 
     fun logout() {
         // Clear user data from settings
