@@ -29,6 +29,28 @@ interface MusicApi {
         @Query("pageSize") pageSize: Int = 20
     ): PaginatedResponse<Song>
 
+    @GET("artists")
+    suspend fun getArtists(
+        @Query("q") query: String? = null,
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int = 20
+    ): PaginatedResponse<Artist>
+
+    @GET("artists/{artistId}/songs")
+    suspend fun getArtistSongs(
+        @Path("artistId") artistId: String,
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int = 20
+    ): PaginatedResponse<Song>
+
+    @GET("search/songs")
+    suspend fun searchSongsWithArtist(
+        @Query("q") query: String,
+        @Query("filterByArtistApiKey") artistId: String?,
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int = 20
+    ): PaginatedResponse<Song>
+
     @POST("songs/starred/{songId}/{userStarred}")
     suspend fun favoriteSong(
         @Path("songId") songId: String,

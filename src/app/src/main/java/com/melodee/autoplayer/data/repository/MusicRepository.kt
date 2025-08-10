@@ -8,6 +8,7 @@ import com.melodee.autoplayer.domain.model.AuthResponse
 import com.melodee.autoplayer.domain.model.PaginatedResponse
 import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
+import com.melodee.autoplayer.domain.model.Artist
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import retrofit2.HttpException
@@ -75,6 +76,42 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
     fun searchSongs(query: String, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
         try {
             val response = api.searchSongs(query, page)
+            emit(response)
+        } catch (e: HttpException) {
+            throw IOException(context.getString(R.string.failed_to_search_songs, e.message()))
+        } catch (e: IOException) {
+            throw IOException(context.getString(R.string.network_error, e.message))
+        }
+    }
+
+    fun searchArtists(query: String, page: Int = 1): Flow<PaginatedResponse<Artist>> = flow {
+        try {
+            val response = api.getArtists(
+                query = if (query.isBlank()) null else query,
+                page = page
+            )
+            emit(response)
+        } catch (e: HttpException) {
+            throw IOException(context.getString(R.string.network_error, e.message()))
+        } catch (e: IOException) {
+            throw IOException(context.getString(R.string.network_error, e.message))
+        }
+    }
+
+    fun getArtistSongs(artistId: String, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
+        try {
+            val response = api.getArtistSongs(artistId, page)
+            emit(response)
+        } catch (e: HttpException) {
+            throw IOException(context.getString(R.string.network_error, e.message()))
+        } catch (e: IOException) {
+            throw IOException(context.getString(R.string.network_error, e.message))
+        }
+    }
+
+    fun searchSongsWithArtist(query: String, artistId: String?, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
+        try {
+            val response = api.searchSongsWithArtist(query, artistId, page)
             emit(response)
         } catch (e: HttpException) {
             throw IOException(context.getString(R.string.failed_to_search_songs, e.message()))

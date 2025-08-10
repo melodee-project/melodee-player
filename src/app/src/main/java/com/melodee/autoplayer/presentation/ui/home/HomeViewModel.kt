@@ -13,6 +13,7 @@ import com.melodee.autoplayer.data.repository.MusicRepository
 import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.User
+import com.melodee.autoplayer.domain.model.Artist
 import com.melodee.autoplayer.service.MusicService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.FlowPreview
@@ -43,6 +44,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    private val _selectedArtist = MutableStateFlow<Artist?>(null)
+    val selectedArtist: StateFlow<Artist?> = _selectedArtist.asStateFlow()
+
+    private val _artists = MutableStateFlow<List<Artist>>(emptyList())
+    val artists: StateFlow<List<Artist>> = _artists.asStateFlow()
+
+    private val _artistSearchQuery = MutableStateFlow("")
+    val artistSearchQuery: StateFlow<String> = _artistSearchQuery.asStateFlow()
+
+    private val _isArtistLoading = MutableStateFlow(false)
+    val isArtistLoading: StateFlow<Boolean> = _isArtistLoading.asStateFlow()
+
     private val _totalSearchResults = MutableStateFlow(0)
     val totalSearchResults: StateFlow<Int> = _totalSearchResults.asStateFlow()
 
@@ -71,6 +84,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var hasMorePlaylists = true
     private var hasMoreSongs = true
     private var currentSearchPage = 1
+    private var currentArtistPage = 1
+    private var hasMoreArtists = true
     private var progressUpdateJob: Job? = null
 
     private val connection = object : ServiceConnection {
@@ -167,7 +182,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        // Set up debounced search
+        // Set up debounced song search
         viewModelScope.launch {
             @OptIn(FlowPreview::class)
             _searchQuery
@@ -181,6 +196,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _currentSongIndex.value = -1
                     } else {
                         performSearch(query)
+                    }
+                }
+        }
+
+        // Set up debounced artist search
+        viewModelScope.launch {
+            @OptIn(FlowPreview::class)
+            _artistSearchQuery
+                .debounce(500) // 0.5 second delay for faster autocomplete
+                .collect { query ->
+                    if (query.length >= 2) { // Minimum 2 characters
+                        performArtistSearch(query)
+                    } else {
+                        _artists.value = emptyList()
+                        _isArtistLoading.value = false
                     }
                 }
         }
@@ -373,25 +403,69 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository?.searchSongs(query, currentSearchPage)
-                    ?.catch { _ ->
-                        _isLoading.value = false
-                    }
-                    ?.collect { response ->
-                        _songs.value = if (currentSearchPage == 1) {
-                            response.data
-                        } else {
-                            _songs.value + response.data
+                val selectedArtistId = _selectedArtist.value?.id?.toString()
+                
+                if (selectedArtistId != null && query.isBlank()) {
+                    // Show all songs for selected artist when no song query
+                    repository?.getArtistSongs(selectedArtistId, currentSearchPage)
+                        ?.catch { _ ->
+                            _isLoading.value = false
                         }
-                        _totalSearchResults.value = response.meta.totalCount
-                        _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
-                        _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
-                        hasMoreSongs = response.meta.hasNext
-                        currentSearchPage = response.meta.currentPage + 1
-                        _isLoading.value = false
-
-                        // Note: Removed auto-play logic - users must manually click on songs to play them
+                        ?.collect { response ->
+                            _songs.value = if (currentSearchPage == 1) {
+                                response.data
+                            } else {
+                                _songs.value + response.data
+                            }
+                            _totalSearchResults.value = response.meta.totalCount
+                            _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
+                            _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
+                            hasMoreSongs = response.meta.hasNext
+                            currentSearchPage = response.meta.currentPage + 1
+                            _isLoading.value = false
+                        }
+                } else {
+                    // Use appropriate search method based on artist filter
+                    if (selectedArtistId != null) {
+                        // Search songs with artist filter
+                        repository?.searchSongsWithArtist(query, selectedArtistId, currentSearchPage)
+                            ?.catch { _ ->
+                                _isLoading.value = false
+                            }
+                            ?.collect { response ->
+                                _songs.value = if (currentSearchPage == 1) {
+                                    response.data
+                                } else {
+                                    _songs.value + response.data
+                                }
+                                _totalSearchResults.value = response.meta.totalCount
+                                _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
+                                _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
+                                hasMoreSongs = response.meta.hasNext
+                                currentSearchPage = response.meta.currentPage + 1
+                                _isLoading.value = false
+                            }
+                    } else {
+                        // Search all songs (Everyone) - use original searchSongs endpoint
+                        repository?.searchSongs(query, currentSearchPage)
+                            ?.catch { _ ->
+                                _isLoading.value = false
+                            }
+                            ?.collect { response ->
+                                _songs.value = if (currentSearchPage == 1) {
+                                    response.data
+                                } else {
+                                    _songs.value + response.data
+                                }
+                                _totalSearchResults.value = response.meta.totalCount
+                                _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
+                                _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
+                                hasMoreSongs = response.meta.hasNext
+                                currentSearchPage = response.meta.currentPage + 1
+                                _isLoading.value = false
+                            }
                     }
+                }
             } catch (e: Exception) {
                 _isLoading.value = false
             }
@@ -412,6 +486,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _user.value = user
         
         // Load playlists when user is set (after authentication)
+        // Artists will be loaded on-demand when user searches
         if (repository != null) {
             loadPlaylists()
         }
@@ -538,6 +613,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _playlists.value = emptyList()
         _songs.value = emptyList()
         _searchQuery.value = ""
+        _selectedArtist.value = null
+        _artists.value = emptyList()
+        _artistSearchQuery.value = ""
+        _isArtistLoading.value = false
         _totalSearchResults.value = 0
         _currentPageStart.value = 0
         _currentPageEnd.value = 0
@@ -553,6 +632,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         hasMorePlaylists = true
         hasMoreSongs = true
         currentSearchPage = 1
+        currentArtistPage = 1
+        hasMoreArtists = true
         
         // Stop progress updates
         stopProgressUpdates()
@@ -632,6 +713,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         stopProgressUpdates()
         
         Log.d("HomeViewModel", "Queue cleared")
+    }
+
+    private fun performArtistSearch(query: String) {
+        if (repository == null) return
+        
+        viewModelScope.launch {
+            _isArtistLoading.value = true
+            try {
+                repository?.searchArtists(query, 1) // Always search from page 1 for autocomplete
+                    ?.catch { _ ->
+                        _isArtistLoading.value = false
+                    }
+                    ?.collect { response ->
+                        _artists.value = response.data.take(10) // Limit to 10 results for autocomplete
+                        _isArtistLoading.value = false
+                    }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error searching artists", e)
+                _isArtistLoading.value = false
+            }
+        }
+    }
+
+    fun searchArtists(query: String) {
+        _artistSearchQuery.value = query
+    }
+
+    fun selectArtist(artist: Artist?) {
+        _selectedArtist.value = artist
+        
+        // Clear current songs and reset pagination
+        _songs.value = emptyList()
+        currentSearchPage = 1
+        hasMoreSongs = true
+        
+        // If artist is selected and no search query, load all artist songs
+        if (artist != null && _searchQuery.value.isBlank()) {
+            performSearch("")
+        } else if (artist != null && _searchQuery.value.isNotBlank()) {
+            // Re-search with the new artist filter
+            performSearch(_searchQuery.value)
+        } else if (artist == null) {
+            // Reset to "Everyone" - if there's a search query, re-search without artist filter
+            if (_searchQuery.value.isNotBlank()) {
+                performSearch(_searchQuery.value)
+            }
+        }
     }
 
     fun refreshPlaylists() {
