@@ -34,14 +34,14 @@ import com.melodee.autoplayer.data.AuthenticationManager
 import com.melodee.autoplayer.data.api.NetworkModule
 import com.melodee.autoplayer.MelodeeApplication
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.map
 
 class MusicService : MediaBrowserServiceCompat() {
     private var player: ExoPlayer? = null
     private var currentSong: Song? = null
     private val binder = MusicBinder()
     private var mediaSession: MediaSessionCompat? = null
-    private val playlistManager = PlaylistManager()
-    private val queueManager = QueueManager()
+    private lateinit var playbackManager: MusicPlaybackManager
     private var scrobbleManager: ScrobbleManager? = null
     private lateinit var settingsManager: SettingsManager
     private lateinit var authenticationManager: AuthenticationManager
@@ -53,18 +53,18 @@ class MusicService : MediaBrowserServiceCompat() {
     private var audioFocusRequest: AudioFocusRequest? = null
     private var hasAudioFocus = false
 
-    // Add playback context tracking
+    // Add playback context tracking (moved to MusicPlaybackManager)
     enum class PlaybackContext {
         PLAYLIST,    // Playing from a playlist
         SEARCH,      // Playing from search results
         SINGLE_SONG  // Playing a single song
     }
-    
-    private var currentPlaybackContext = PlaybackContext.SINGLE_SONG
     private var currentBrowsingPlaylistId: String? = null  // Track which playlist is currently being browsed
     private var currentBrowsingPlaylistSongs: List<Song> = emptyList()  // Cache songs from the browsed playlist
     private var searchResultsCache: List<Song> = emptyList()  // Cache search results for Android Auto playback
     private var searchResultsCacheTime: Long = 0  // Track when search results were cached
+    
+    // Helper to access playback context from consolidated manager
 
     companion object {
         private const val NOTIFICATION_ID = 1
@@ -110,6 +110,9 @@ class MusicService : MediaBrowserServiceCompat() {
         // Get authentication manager from application
         val app = application as MelodeeApplication
         authenticationManager = app.authenticationManager
+        
+        // Initialize consolidated playback manager
+        playbackManager = MusicPlaybackManager(this)
         
         // Authentication is now handled by AuthenticationManager
         // It will automatically restore authentication if available
@@ -380,16 +383,16 @@ class MusicService : MediaBrowserServiceCompat() {
         val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
         
         // First try current queue, then playlist manager
-        val songs = if (queueManager.currentQueue.value.isNotEmpty()) {
-            queueManager.currentQueue.value
+        val songs = if (queueManager().currentQueue.value.isNotEmpty()) {
+            queueManager().currentQueue.value
         } else {
-            playlistManager.currentPlaylist.value
+            playlistManager().currentPlaylist.value
         }
         
         Log.d("MusicService", "Loading ${songs.size} songs for current queue")
         Log.d("MusicService", "Current song: ${currentSong?.title}")
-        Log.d("MusicService", "Queue manager songs: ${queueManager.currentQueue.value.size}")
-        Log.d("MusicService", "Playlist manager songs: ${playlistManager.currentPlaylist.value.size}")
+        Log.d("MusicService", "Queue manager songs: ${queueManager().currentQueue.value.size}")
+        Log.d("MusicService", "Playlist manager songs: ${playlistManager().currentPlaylist.value.size}")
         
         if (songs.isNotEmpty()) {
             songs.forEach { song ->
@@ -710,11 +713,11 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.d("MusicService", "Received play command for song: ${song?.title}")
                 if (song != null) {
                     // Set context to single song if no queue is set
-                    if (queueManager.getQueueSize() == 0) {
-                        currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                    if (queueManager().getQueueSize() == 0) {
+                        // Context set by playbackManager.setQueue call
                     }
-                    queueManager.addToQueue(song)
-                    playlistManager.playSong(song)
+                    queueManager().addToQueue(song)
+                    playlistManager().playSong(song)
                     
                     // Notify Android Auto that the queue has changed
                     notifyQueueChanged()
@@ -728,9 +731,9 @@ class MusicService : MediaBrowserServiceCompat() {
                 val songs = intent.getParcelableArrayListExtra<Song>(EXTRA_PLAYLIST)
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
                 if (songs != null) {
-                    currentPlaybackContext = PlaybackContext.PLAYLIST
-                    queueManager.setQueue(songs, startIndex)
-                    playlistManager.setPlaylist(songs, startIndex)
+                    // Context set by playbackManager.setQueue call
+                    queueManager().setQueue(songs, startIndex)
+                    playlistManager().setPlaylist(songs, startIndex)
                     
                     // Notify Android Auto that the queue has changed
                     notifyQueueChanged()
@@ -744,9 +747,9 @@ class MusicService : MediaBrowserServiceCompat() {
                 val songs = intent.getParcelableArrayListExtra<Song>(EXTRA_SEARCH_RESULTS)
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
                 if (songs != null) {
-                    currentPlaybackContext = PlaybackContext.SEARCH
-                    queueManager.setQueue(songs, startIndex)
-                    playlistManager.setPlaylist(songs, startIndex)
+                    // Context set by playbackManager.setQueue call
+                    queueManager().setQueue(songs, startIndex)
+                    playlistManager().setPlaylist(songs, startIndex)
                     
                     // Notify Android Auto that the queue has changed
                     notifyQueueChanged()
@@ -782,12 +785,12 @@ class MusicService : MediaBrowserServiceCompat() {
             }
             ACTION_TOGGLE_SHUFFLE -> {
                 Log.d("MusicService", "Received toggle shuffle command")
-                queueManager.toggleShuffle()
+                queueManager().toggleShuffle()
                 updateMediaSessionPlaybackState()
             }
             ACTION_TOGGLE_REPEAT -> {
                 Log.d("MusicService", "Received toggle repeat command")
-                queueManager.toggleRepeat()
+                queueManager().toggleRepeat()
                 updateMediaSessionPlaybackState()
             }
             ACTION_CLEAR_QUEUE -> {
@@ -828,7 +831,9 @@ class MusicService : MediaBrowserServiceCompat() {
         
         mediaSession?.release()
         mediaSession = null
-        player?.release()
+        
+        // Release playback manager (which handles player cleanup)
+        playbackManager.release()
         player = null
         super.onDestroy()
     }
@@ -1014,17 +1019,10 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     private fun setupPlayer() {
-        Log.d("MusicService", "Setting up ExoPlayer")
+        Log.d("MusicService", "Setting up ExoPlayer via MusicPlaybackManager")
         
-        // Configure audio attributes for Android Auto compatibility
-        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
-            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
-            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
-            .build()
-        
-        player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, false) // Disable automatic audio focus - we handle it manually
-            .build().apply {
+        // Initialize player through consolidated manager
+        player = playbackManager.initializePlayer().apply {
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     Log.d("MusicService", "Playback state changed: $state")
@@ -1134,13 +1132,13 @@ class MusicService : MediaBrowserServiceCompat() {
                 PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE or
                 PlaybackStateCompat.ACTION_SET_REPEAT_MODE
 
-        val shuffleMode = if (queueManager.isShuffleEnabled()) {
+        val shuffleMode = if (queueManager().isShuffleEnabled()) {
             PlaybackStateCompat.SHUFFLE_MODE_ALL
         } else {
             PlaybackStateCompat.SHUFFLE_MODE_NONE
         }
 
-        val repeatMode = when (queueManager.getRepeatMode()) {
+        val repeatMode = when (queueManager().getRepeatMode()) {
             QueueManager.RepeatMode.NONE -> PlaybackStateCompat.REPEAT_MODE_NONE
             QueueManager.RepeatMode.ONE -> PlaybackStateCompat.REPEAT_MODE_ONE
             QueueManager.RepeatMode.ALL -> PlaybackStateCompat.REPEAT_MODE_ALL
@@ -1240,9 +1238,9 @@ class MusicService : MediaBrowserServiceCompat() {
             val firstSong = currentBrowsingPlaylistSongs.first()
             
             // Set the playlist context and play the first song
-            currentPlaybackContext = PlaybackContext.PLAYLIST
-            queueManager.setQueue(currentBrowsingPlaylistSongs, 0)
-            playlistManager.setPlaylist(currentBrowsingPlaylistSongs, 0)
+            // Context set by playbackManager.setQueue call
+            queueManager().setQueue(currentBrowsingPlaylistSongs, 0)
+            playlistManager().setPlaylist(currentBrowsingPlaylistSongs, 0)
             
             // Notify Android Auto that the queue has changed
             notifyQueueChanged()
@@ -1252,23 +1250,23 @@ class MusicService : MediaBrowserServiceCompat() {
         }
         
         // Second, try to play from current queue
-        val queueSongs = queueManager.currentQueue.value
+        val queueSongs = queueManager().currentQueue.value
         if (queueSongs.isNotEmpty()) {
             Log.d("MusicService", "Playing from current queue")
             val firstSong = queueSongs.first()
-            currentPlaybackContext = PlaybackContext.PLAYLIST
-            playlistManager.setPlaylist(queueSongs, 0)
+            // Context set by playbackManager.setQueue call
+            playlistManager().setPlaylist(queueSongs, 0)
             playSong(firstSong)
             return
         }
         
         // Third, try to play from current playlist
-        val playlistSongs = playlistManager.currentPlaylist.value
+        val playlistSongs = playlistManager().currentPlaylist.value
         if (playlistSongs.isNotEmpty()) {
             Log.d("MusicService", "Playing from current playlist")
             val firstSong = playlistSongs.first()
-            currentPlaybackContext = PlaybackContext.PLAYLIST
-            queueManager.setQueue(playlistSongs, 0)
+            // Context set by playbackManager.setQueue call
+            queueManager().setQueue(playlistSongs, 0)
             
             // Notify Android Auto that the queue has changed
             notifyQueueChanged()
@@ -1301,16 +1299,16 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     private fun skipToNext() {
-        Log.d("MusicService", "Skipping to next song, context: $currentPlaybackContext")
+        Log.d("MusicService", "Skipping to next song, context: ${getCurrentPlaybackContext()}")
         
-        when (currentPlaybackContext) {
+        when (getCurrentPlaybackContext()) {
             PlaybackContext.PLAYLIST, PlaybackContext.SEARCH -> {
                 // Use queue manager's skipToNext which handles index updates properly
-                val nextSong = queueManager.skipToNext()
+                val nextSong = queueManager().skipToNext()
                 if (nextSong != null) {
                     Log.d("MusicService", "Playing next song: ${nextSong.title}")
                     // Update playlist manager to keep them synchronized
-                    playlistManager.playSong(nextSong)
+                    playlistManager().playSong(nextSong)
                     playSong(nextSong)
                     Log.d("MusicService", "Successfully started playing next song: ${nextSong.title}")
                 } else {
@@ -1330,11 +1328,11 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Skipping to previous song")
         
         // Use queue manager's skipToPrevious which handles index updates properly
-        val previousSong = queueManager.skipToPrevious()
+        val previousSong = queueManager().skipToPrevious()
         if (previousSong != null) {
             Log.d("MusicService", "Playing previous song: ${previousSong.title}")
             // Update playlist manager to keep them synchronized
-            playlistManager.playSong(previousSong)
+            playlistManager().playSong(previousSong)
             playSong(previousSong)
             Log.d("MusicService", "Successfully started playing previous song: ${previousSong.title}")
         } else {
@@ -1386,13 +1384,15 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    fun getPlaylistManager(): PlaylistManager = playlistManager
-    
-    fun getQueueManager(): QueueManager = queueManager
+    // Removed duplicate getters - using adapters at bottom of file
 
     fun getCurrentSong(): Song? = currentSong
     
-    fun getCurrentPlaybackContext(): PlaybackContext = currentPlaybackContext
+    fun getCurrentPlaybackContext(): PlaybackContext = when (playbackManager.playbackContext.value) {
+        MusicPlaybackManager.PlaybackContext.PLAYLIST -> PlaybackContext.PLAYLIST
+        MusicPlaybackManager.PlaybackContext.SEARCH -> PlaybackContext.SEARCH
+        MusicPlaybackManager.PlaybackContext.SINGLE_SONG -> PlaybackContext.SINGLE_SONG
+    }
 
     private fun clearQueue() {
         Log.d("MusicService", "Clearing queue and stopping playback")
@@ -1402,8 +1402,8 @@ class MusicService : MediaBrowserServiceCompat() {
         currentSong = null
         
         // Clear both queue and playlist managers
-        queueManager.clearQueue()
-        playlistManager.clear()
+        queueManager().clearQueue()
+        playlistManager().clear()
         
         // Clear browsing context
         currentBrowsingPlaylistId = null
@@ -1414,7 +1414,7 @@ class MusicService : MediaBrowserServiceCompat() {
         searchResultsCacheTime = 0
         
         // Reset playback context
-        currentPlaybackContext = PlaybackContext.SINGLE_SONG
+        // Context set by playbackManager.setQueue call
         
         // Update media session
         updateMediaSessionPlaybackState()
@@ -1502,8 +1502,8 @@ class MusicService : MediaBrowserServiceCompat() {
             override fun onSetShuffleMode(shuffleMode: Int) {
                 Log.d("MusicService", "MediaSession onSetShuffleMode: $shuffleMode")
                 when (shuffleMode) {
-                    PlaybackStateCompat.SHUFFLE_MODE_ALL -> queueManager.setShuffle(true)
-                    PlaybackStateCompat.SHUFFLE_MODE_NONE -> queueManager.setShuffle(false)
+                    PlaybackStateCompat.SHUFFLE_MODE_ALL -> queueManager().setShuffle(true)
+                    PlaybackStateCompat.SHUFFLE_MODE_NONE -> queueManager().setShuffle(false)
                 }
                 updateMediaSessionPlaybackState()
             }
@@ -1515,7 +1515,7 @@ class MusicService : MediaBrowserServiceCompat() {
                     PlaybackStateCompat.REPEAT_MODE_ALL -> QueueManager.RepeatMode.ALL
                     else -> QueueManager.RepeatMode.NONE
                 }
-                queueManager.setRepeatMode(mode)
+                queueManager().setRepeatMode(mode)
                 updateMediaSessionPlaybackState()
             }
 
@@ -1546,7 +1546,7 @@ class MusicService : MediaBrowserServiceCompat() {
                         skipToPrevious()
                     }
                     query.contains("shuffle", ignoreCase = true) -> {
-                        queueManager.toggleShuffle()
+                        queueManager().toggleShuffle()
                         updateMediaSessionPlaybackState()
                     }
                     else -> {
@@ -1564,7 +1564,7 @@ class MusicService : MediaBrowserServiceCompat() {
                                     firstSong?.let { mediaItem ->
                                         Log.i("MusicService", "Playing first search result: ${mediaItem.description.title}")
                                         // Set context to single song so it stops after playing
-                                        currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                                        // Context will be set when playing single song
                                         // Fetch and play the song
                                         mediaItem.mediaId?.let { mediaId ->
                                             fetchAndPlaySong(mediaId)
@@ -1588,8 +1588,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.i("MusicService", "MediaID: $mediaId")
                 Log.i("MusicService", "Current browsing playlist ID: $currentBrowsingPlaylistId")
                 Log.i("MusicService", "Browsing playlist songs count: ${currentBrowsingPlaylistSongs.size}")
-                Log.i("MusicService", "Queue songs count: ${queueManager.currentQueue.value.size}")
-                Log.i("MusicService", "Playlist songs count: ${playlistManager.currentPlaylist.value.size}")
+                Log.i("MusicService", "Queue songs count: ${queueManager().currentQueue.value.size}")
+                Log.i("MusicService", "Playlist songs count: ${playlistManager().currentPlaylist.value.size}")
                 Log.i("MusicService", "Extras: $extras")
                 
                 // Handle playing specific songs by media ID
@@ -1606,13 +1606,13 @@ class MusicService : MediaBrowserServiceCompat() {
                         val queueIndexStr = id.removePrefix("queue_")
                         val queueIndex = queueIndexStr.toIntOrNull()
                         if (queueIndex != null) {
-                            val currentQueueSongs = queueManager.currentQueue.value
+                            val currentQueueSongs = queueManager().currentQueue.value
                             if (queueIndex >= 0 && queueIndex < currentQueueSongs.size) {
                                 val songToPlay = currentQueueSongs[queueIndex]
                                 Log.i("MusicService", "Playing song from queue at index $queueIndex: ${songToPlay.title}")
                                 
                                 // Update queue manager to the selected index
-                                queueManager.playAtIndex(queueIndex)
+                                queueManager().playAtIndex(queueIndex)
                                 playSong(songToPlay)
                                 return@let
                             } else {
@@ -1628,8 +1628,8 @@ class MusicService : MediaBrowserServiceCompat() {
                     Log.d("MusicService", "Searching for song with ID: $id")
                     
                     // First try to find the song in current browsing content
-                    val queueSongs = queueManager.currentQueue.value
-                    val playlistSongs = playlistManager.currentPlaylist.value
+                    val queueSongs = queueManager().currentQueue.value
+                    val playlistSongs = playlistManager().currentPlaylist.value
                     val browsingPlaylistSongs = currentBrowsingPlaylistSongs
                     val searchSongs = searchResultsCache
                     val allSongs = (queueSongs + playlistSongs + browsingPlaylistSongs + searchSongs).distinctBy { it.id }
@@ -1649,7 +1649,7 @@ class MusicService : MediaBrowserServiceCompat() {
                         // Check if we're browsing a playlist context
                         if (currentBrowsingPlaylistId != null && !isFromSearchCache) {
                             Log.i("MusicService", "Playing song from playlist context: $currentBrowsingPlaylistId")
-                            currentPlaybackContext = PlaybackContext.PLAYLIST
+                            // Context set by playbackManager.setQueue call
                             // Load the entire playlist if needed
                             loadPlaylistAndPlay(currentBrowsingPlaylistId!!, song)
                         } else {
@@ -1657,14 +1657,14 @@ class MusicService : MediaBrowserServiceCompat() {
                             val isFromSearch = extras?.getBoolean("from_search", false) == true || isFromSearchCache
                             if (isFromSearch) {
                                 Log.i("MusicService", "Playing song from search results as single song")
-                                currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                                // Context set by playbackManager.setQueue call
                                 // Play just this song, don't add to queue
                                 playSong(song)
                             } else {
                                 Log.i("MusicService", "Playing song as individual track")
-                                currentPlaybackContext = PlaybackContext.SINGLE_SONG
-                                queueManager.addToQueue(song)
-                                playlistManager.playSong(song)
+                                // Context set by playbackManager.setQueue call
+                                queueManager().addToQueue(song)
+                                playlistManager().playSong(song)
                                 playSong(song)
                             }
                         }
@@ -1673,7 +1673,7 @@ class MusicService : MediaBrowserServiceCompat() {
                         Log.w("MusicService", "Available song IDs: ${allSongs.map { "${it.id} (${it.title})" }}")
                         // Try to fetch and play the song from API (for search results or new playlists)
                         // When playing from search, set context to single song
-                        currentPlaybackContext = PlaybackContext.SINGLE_SONG
+                        // Context set by playbackManager.setQueue call
                         fetchAndPlaySong(id)
                     }
                 }
@@ -1753,9 +1753,9 @@ class MusicService : MediaBrowserServiceCompat() {
                     Log.i("MusicService", "Start index for song: $startIndex")
                     
                     if (startIndex >= 0) {
-                        currentPlaybackContext = PlaybackContext.PLAYLIST
-                        queueManager.setQueue(playlistSongs, startIndex)
-                        playlistManager.setPlaylist(playlistSongs, startIndex)
+                        // Context set by playbackManager.setQueue call
+                        queueManager().setQueue(playlistSongs, startIndex)
+                        playlistManager().setPlaylist(playlistSongs, startIndex)
                         
                         // Notify Android Auto that the queue has changed
                         notifyQueueChanged()
@@ -1765,8 +1765,8 @@ class MusicService : MediaBrowserServiceCompat() {
                         Log.i("MusicService", "Successfully loaded playlist and started playback")
                     } else {
                         Log.w("MusicService", "Song not found in playlist, playing as standalone")
-                        queueManager.addToQueue(songToPlay)
-                        playlistManager.playSong(songToPlay)
+                        queueManager().addToQueue(songToPlay)
+                        playlistManager().playSong(songToPlay)
                         
                         // Notify Android Auto that the queue has changed
                         notifyQueueChanged()
@@ -1776,8 +1776,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 } else {
                     Log.w("MusicService", "Playlist $playlistId is empty, playing song standalone")
                     // Just play the single song
-                    queueManager.addToQueue(songToPlay)
-                    playlistManager.playSong(songToPlay)
+                    queueManager().addToQueue(songToPlay)
+                    playlistManager().playSong(songToPlay)
                     
                     // Notify Android Auto that the queue has changed (even for single songs)
                     notifyQueueChanged()
@@ -1791,8 +1791,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 
                 // Fallback to playing just the single song
                 Log.i("MusicService", "Falling back to standalone song playback")
-                queueManager.addToQueue(songToPlay)
-                playlistManager.playSong(songToPlay)
+                queueManager().addToQueue(songToPlay)
+                playlistManager().playSong(songToPlay)
                 
                 // Notify Android Auto that the queue has changed
                 notifyQueueChanged()
@@ -1813,8 +1813,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 
                 // Check all possible sources again
                 val allAvailableSongs = mutableListOf<Song>()
-                allAvailableSongs.addAll(queueManager.currentQueue.value)
-                allAvailableSongs.addAll(playlistManager.currentPlaylist.value)
+                allAvailableSongs.addAll(queueManager().currentQueue.value)
+                allAvailableSongs.addAll(playlistManager().currentPlaylist.value)
                 allAvailableSongs.addAll(currentBrowsingPlaylistSongs)
                 allAvailableSongs.addAll(searchResultsCache)  // Include cached search results
                 
@@ -1822,12 +1822,12 @@ class MusicService : MediaBrowserServiceCompat() {
                 if (song != null) {
                     Log.i("MusicService", "Found song in available collections: ${song.title}")
                     // Play as single song based on current context
-                    if (currentPlaybackContext == PlaybackContext.SINGLE_SONG) {
+                    if (getCurrentPlaybackContext() == PlaybackContext.SINGLE_SONG) {
                         Log.i("MusicService", "Playing as single song - will stop after completion")
                         playSong(song)
                     } else {
-                        queueManager.addToQueue(song)
-                        playlistManager.playSong(song)
+                        queueManager().addToQueue(song)
+                        playlistManager().playSong(song)
                         
                         // Notify Android Auto that the queue has changed
                         notifyQueueChanged()
@@ -1871,15 +1871,15 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Populating test content for Android Auto debugging")
         
         // Check if we have any content
-        val hasQueueContent = queueManager.currentQueue.value.isNotEmpty()
-        val hasPlaylistContent = playlistManager.currentPlaylist.value.isNotEmpty()
+        val hasQueueContent = queueManager().currentQueue.value.isNotEmpty()
+        val hasPlaylistContent = playlistManager().currentPlaylist.value.isNotEmpty()
         
         Log.d("MusicService", "Current content status - Queue: $hasQueueContent, Playlist: $hasPlaylistContent")
         
         if (!hasQueueContent && !hasPlaylistContent) {
             Log.d("MusicService", "No content available - Android Auto will show 'No Music Available' message")
         } else {
-            Log.d("MusicService", "Content available - Queue: ${queueManager.currentQueue.value.size}, Playlist: ${playlistManager.currentPlaylist.value.size}")
+            Log.d("MusicService", "Content available - Queue: ${queueManager().currentQueue.value.size}, Playlist: ${playlistManager().currentPlaylist.value.size}")
         }
     }
 
@@ -2256,7 +2256,7 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Notifying Android Auto that queue has changed")
         
         // Update MediaSessionCompat queue for Android Auto
-        val currentQueueSongs = queueManager.currentQueue.value
+        val currentQueueSongs = queueManager().currentQueue.value
         if (currentQueueSongs.isNotEmpty()) {
             val sessionQueue = currentQueueSongs.mapIndexed { index, song ->
                 MediaSessionCompat.QueueItem(
@@ -2274,7 +2274,7 @@ class MusicService : MediaBrowserServiceCompat() {
             mediaSession?.setQueue(sessionQueue)
             
             // Set queue title based on playback context
-            val queueTitle = when (currentPlaybackContext) {
+            val queueTitle = when (getCurrentPlaybackContext()) {
                 PlaybackContext.PLAYLIST -> "Playlist Queue"
                 PlaybackContext.SEARCH -> "Search Results"
                 PlaybackContext.SINGLE_SONG -> "Now Playing"
@@ -2326,4 +2326,121 @@ class MusicService : MediaBrowserServiceCompat() {
             }
         }
     }
+
+    // === ADAPTER METHODS FOR LEGACY COMPATIBILITY ===
+    // These methods maintain compatibility with existing code while using the consolidated manager
+    
+    inner class QueueManagerAdapter {
+        val currentQueue get() = playbackManager.currentQueue
+        val currentIndex get() = playbackManager.currentIndex
+        val currentSong get() = playbackManager.currentSong
+        
+        fun setQueue(songs: List<Song>, startIndex: Int = 0) {
+            playbackManager.setQueue(songs, startIndex, MusicPlaybackManager.PlaybackContext.PLAYLIST)
+        }
+        
+        fun addToQueue(song: Song) {
+            val currentList = playbackManager.currentQueue.value.toMutableList()
+            currentList.add(song)
+            playbackManager.setQueue(currentList, playbackManager.currentIndex.value)
+        }
+        
+        fun clearQueue() = playbackManager.clearQueue()
+        
+        fun getQueueSize() = playbackManager.currentQueue.value.size
+        
+        fun skipToNext() = if (playbackManager.playNext()) playbackManager.currentSong.value else null
+        
+        fun skipToPrevious() = if (playbackManager.playPrevious()) playbackManager.currentSong.value else null
+        
+        fun toggleShuffle() = playbackManager.toggleShuffle()
+        
+        fun toggleRepeat() = playbackManager.toggleRepeat()
+        
+        val isShuffleEnabled get() = playbackManager.isShuffleEnabled
+        
+        val repeatMode get() = playbackManager.repeatMode.map { mode ->
+            when (mode) {
+                MusicPlaybackManager.RepeatMode.NONE -> QueueManager.RepeatMode.NONE
+                MusicPlaybackManager.RepeatMode.ONE -> QueueManager.RepeatMode.ONE
+                MusicPlaybackManager.RepeatMode.ALL -> QueueManager.RepeatMode.ALL
+            }
+        }
+        
+        fun getRepeatMode() = when (playbackManager.repeatMode.value) {
+            MusicPlaybackManager.RepeatMode.NONE -> QueueManager.RepeatMode.NONE
+            MusicPlaybackManager.RepeatMode.ONE -> QueueManager.RepeatMode.ONE
+            MusicPlaybackManager.RepeatMode.ALL -> QueueManager.RepeatMode.ALL
+        }
+        
+        fun isShuffleEnabled() = playbackManager.isShuffleEnabled.value
+        
+        fun setShuffle(enabled: Boolean) {
+            if (enabled != playbackManager.isShuffleEnabled.value) {
+                playbackManager.toggleShuffle()
+            }
+        }
+        
+        fun setRepeatMode(mode: QueueManager.RepeatMode) {
+            val currentMode = playbackManager.repeatMode.value
+            val targetMode = when (mode) {
+                QueueManager.RepeatMode.NONE -> MusicPlaybackManager.RepeatMode.NONE
+                QueueManager.RepeatMode.ONE -> MusicPlaybackManager.RepeatMode.ONE
+                QueueManager.RepeatMode.ALL -> MusicPlaybackManager.RepeatMode.ALL
+            }
+            
+            while (playbackManager.repeatMode.value != targetMode) {
+                playbackManager.toggleRepeat()
+            }
+        }
+        
+        fun playAtIndex(index: Int): Boolean {
+            val songs = playbackManager.currentQueue.value
+            return if (index in songs.indices) {
+                playbackManager.playSong(songs[index])
+            } else false
+        }
+        
+        fun removeFromQueue(song: Song) {
+            val currentList = playbackManager.currentQueue.value.toMutableList()
+            currentList.remove(song)
+            val currentIndex = playbackManager.currentIndex.value
+            playbackManager.setQueue(currentList, if (currentIndex >= currentList.size) 0 else currentIndex)
+        }
+        
+        fun removeFromQueue(index: Int) {
+            val currentList = playbackManager.currentQueue.value.toMutableList()
+            if (index in currentList.indices) {
+                currentList.removeAt(index)
+                val currentIndex = playbackManager.currentIndex.value
+                playbackManager.setQueue(currentList, if (currentIndex >= currentList.size) 0 else currentIndex)
+            }
+        }
+    }
+    
+    inner class PlaylistManagerAdapter {
+        val currentPlaylist get() = playbackManager.currentQueue
+        val currentIndex get() = playbackManager.currentIndex
+        val currentSong get() = playbackManager.currentSong
+        
+        fun setPlaylist(songs: List<Song>, startIndex: Int = 0) {
+            playbackManager.setQueue(songs, startIndex, MusicPlaybackManager.PlaybackContext.PLAYLIST)
+        }
+        
+        fun playSong(song: Song): Boolean = playbackManager.playSong(song)
+        
+        fun clear() = playbackManager.clearQueue()
+    }
+    
+    // Legacy manager adapters (replace the old manager declarations)
+    private val _queueManager by lazy { QueueManagerAdapter() }
+    private val _playlistManager by lazy { PlaylistManagerAdapter() }
+    
+    // Public getters for external access
+    fun getPlaylistManager() = _playlistManager
+    fun getQueueManager() = _queueManager
+    
+    // Direct access for internal code
+    private fun queueManager() = _queueManager
+    private fun playlistManager() = _playlistManager
 }

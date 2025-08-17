@@ -22,6 +22,7 @@ import com.melodee.autoplayer.R
 import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.Artist
+import com.melodee.autoplayer.domain.model.Album
 import android.media.session.MediaSessionManager
 import android.media.session.MediaController
 import android.media.MediaMetadata
@@ -38,14 +39,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.onFocusChanged
 import com.melodee.autoplayer.util.rememberPermissionState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.ui.text.style.TextOverflow
 import com.melodee.autoplayer.presentation.ui.components.FullImageViewer
+import com.melodee.autoplayer.presentation.ui.components.SongItem
+import com.melodee.autoplayer.presentation.ui.components.AlbumItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Card
@@ -134,6 +140,11 @@ fun HomeScreen(
     val currentPageStart by viewModel.currentPageStart.collectAsStateWithLifecycle()
     val currentPageEnd by viewModel.currentPageEnd.collectAsStateWithLifecycle()
     val currentSongIndex by viewModel.currentSongIndex.collectAsStateWithLifecycle()
+    val albums by viewModel.albums.collectAsStateWithLifecycle()
+    val isAlbumsLoading by viewModel.isAlbumsLoading.collectAsStateWithLifecycle()
+    val showAlbums by viewModel.showAlbums.collectAsStateWithLifecycle()
+    val selectedAlbum by viewModel.selectedAlbum.collectAsStateWithLifecycle()
+    val showAlbumSongs by viewModel.showAlbumSongs.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
@@ -233,6 +244,45 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Browse buttons (shown when specific artist is selected)
+                if (selectedArtist != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { 
+                                viewModel.browseArtistAlbums()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Album,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Browse Albums")
+                        }
+                        
+                        OutlinedButton(
+                            onClick = { 
+                                viewModel.browseArtistSongs()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Browse Songs")
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Search bar
@@ -286,29 +336,117 @@ fun HomeScreen(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                if (searchQuery.isNotEmpty()) {
-                                    items(songs) { song ->
-                                        SongItem(
-                                            song = song,
-                                            onClick = { 
-                                                if (permissionState.hasMediaPermission) {
-                                                    viewModel.playSong(song)
-                                                } else {
-                                                    permissionState.requestPermission()
+                                when {
+                                    showAlbumSongs -> {
+                                        // Show songs for selected album
+                                        item {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Songs in ${selectedAlbum?.name}",
+                                                    style = MaterialTheme.typography.headlineSmall,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                TextButton(
+                                                    onClick = { viewModel.hideAlbumSongs() }
+                                                ) {
+                                                    Text("Back to Albums")
                                                 }
-                                            },
-                                            isCurrentlyPlaying = song == currentSong,
-                                            onFavoriteClick = { songToFavorite, newStarredValue ->
-                                                viewModel.favoriteSong(songToFavorite, newStarredValue)
                                             }
-                                        )
+                                        }
+                                        
+                                        items(songs, key = { it.id }) { song ->
+                                            SongItem(
+                                                song = song,
+                                                onClick = { 
+                                                    if (permissionState.hasMediaPermission) {
+                                                        viewModel.playSong(song)
+                                                    } else {
+                                                        permissionState.requestPermission()
+                                                    }
+                                                },
+                                                isCurrentlyPlaying = song == currentSong,
+                                                onFavoriteClick = { songToFavorite, newStarredValue ->
+                                                    viewModel.favoriteSong(songToFavorite, newStarredValue)
+                                                }
+                                            )
+                                        }
                                     }
-                                } else {
-                                    items(playlists) { playlist ->
-                                        PlaylistItem(
-                                            playlist = playlist,
-                                            onClick = { onPlaylistClick(playlist.id.toString()) }
-                                        )
+                                    showAlbums -> {
+                                        // Show albums for selected artist
+                                        item {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Albums by ${selectedArtist?.name}",
+                                                    style = MaterialTheme.typography.headlineSmall,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                TextButton(
+                                                    onClick = { viewModel.hideAlbums() }
+                                                ) {
+                                                    Text("Back")
+                                                }
+                                            }
+                                        }
+                                        
+                                        if (isAlbumsLoading) {
+                                            item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(32.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    CircularProgressIndicator()
+                                                }
+                                            }
+                                        } else {
+                                            items(albums, key = { it.id }) { album ->
+                                                AlbumItem(
+                                                    album = album,
+                                                    onClick = { 
+                                                        viewModel.browseAlbumSongs(album)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    searchQuery.isNotEmpty() || songs.isNotEmpty() -> {
+                                        // Show songs (either from search or artist browse)
+                                        items(songs, key = { it.id }) { song ->
+                                            SongItem(
+                                                song = song,
+                                                onClick = { 
+                                                    if (permissionState.hasMediaPermission) {
+                                                        viewModel.playSong(song)
+                                                    } else {
+                                                        permissionState.requestPermission()
+                                                    }
+                                                },
+                                                isCurrentlyPlaying = song == currentSong,
+                                                onFavoriteClick = { songToFavorite, newStarredValue ->
+                                                    viewModel.favoriteSong(songToFavorite, newStarredValue)
+                                                }
+                                            )
+                                        }
+                                    }
+                                    else -> {
+                                        // Show playlists (default view)
+                                        items(playlists, key = { it.id }) { playlist ->
+                                            PlaylistItem(
+                                                playlist = playlist,
+                                                onClick = { onPlaylistClick(playlist.id.toString()) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -391,134 +529,6 @@ private fun PlaylistItem(
     }
 }
 
-@Composable
-private fun SongItem(
-    song: Song,
-    onClick: () -> Unit,
-    isCurrentlyPlaying: Boolean = false,
-    onFavoriteClick: (Song, Boolean) -> Unit
-) {
-    val context = LocalContext.current
-    var isPlaying by remember { mutableStateOf(false) }
-    var showFullImage by remember { mutableStateOf(false) }
-    var isStarred by remember { mutableStateOf(song.userStarred) }
-
-    // Update isStarred when song.userStarred changes
-    LaunchedEffect(song.userStarred) {
-        isStarred = song.userStarred
-    }
-
-    // Update playing state when song changes or media controller updates
-    LaunchedEffect(song, isCurrentlyPlaying) {
-        isPlaying = isCurrentlyPlaying
-    }
-
-    val itemHeight = 72.dp
-    val thumbnailSize = 56.dp
-    val horizontalPadding = 16.dp
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(itemHeight)
-            .clickable(onClick = onClick)
-            .background(
-                if (isPlaying) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                } else {
-                    Color.Transparent
-                }
-            )
-            .padding(horizontal = horizontalPadding, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Thumbnail
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(song.thumbnailUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = "Song thumbnail",
-            modifier = Modifier
-                .size(thumbnailSize)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { 
-                    song.imageUrl.let { 
-                        showFullImage = true 
-                    }
-                },
-            error = painterResource(id = R.drawable.ic_launcher_foreground),
-            onError = {
-                Log.e("HomeScreen", "Failed to load song image: ${song.thumbnailUrl}")
-            },
-            contentScale = ContentScale.Crop
-        )
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        // Song info
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.artist.name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.durationFormatted,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Favorite star icon
-        IconButton(
-            onClick = {
-                val newStarredValue = !isStarred
-                isStarred = newStarredValue
-                onFavoriteClick(song, newStarredValue)
-            },
-            modifier = Modifier.size(48.dp)
-        ) {
-            Icon(
-                imageVector = if (isStarred) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                contentDescription = if (isStarred) "Remove from favorites" else "Add to favorites",
-                tint = if (isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-
-        // Play/Pause icon
-        if (isPlaying) {
-            Icon(
-                imageVector = Icons.Default.Pause,
-                contentDescription = "Pause",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
-    
-    // Show full image viewer when requested
-    if (showFullImage) {
-        FullImageViewer(
-            imageUrl = song.imageUrl,
-            contentDescription = "Song Image - ${song.title}",
-            onDismiss = { showFullImage = false }
-        )
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ArtistAutocomplete(
@@ -530,252 +540,156 @@ private fun ArtistAutocomplete(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
-    var textFieldValue by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    var isExpanded by remember { mutableStateOf(false) }
+    var isFocused by remember { mutableStateOf(false) }
     
-    // Stable debounced search - avoid LaunchedEffect with complex dependencies
-    LaunchedEffect(textFieldValue) {
-        if (textFieldValue.length >= 2) {
-            delay(500)
-            onArtistSearchQueryChanged(textFieldValue)
-        } else {
-            onArtistSearchQueryChanged("")
-        }
-    }
-    
-    // Reset text field when artist is selected - simpler approach
+    // Update search query when selectedArtist changes
     LaunchedEffect(selectedArtist) {
-        if (selectedArtist != null) {
-            textFieldValue = ""
-            expanded = false
-        }
+        searchQuery = selectedArtist?.name ?: ""
     }
     
     Column(modifier = modifier) {
-        // Current selection display - stable structure
-        Card(
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { query ->
+                searchQuery = query
+                // Immediately call the ViewModel (which has the 500ms debouncing)
+                onArtistSearchQueryChanged(query)
+                // Expand dropdown when focused and has content or results
+                isExpanded = isFocused && (query.isNotEmpty() || artists.isNotEmpty())
+            },
+            label = { Text("Filter by Artist") },
+            placeholder = { Text("Search artists or select 'Everyone'") },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .clickable(enabled = selectedArtist == null) {
-                    expanded = true
+                .onFocusChanged { focusState ->
+                    isFocused = focusState.isFocused
+                    if (focusState.isFocused) {
+                        isExpanded = searchQuery.isNotEmpty() || artists.isNotEmpty()
+                    }
                 },
-            colors = CardDefaults.cardColors(
-                containerColor = if (selectedArtist != null) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                }
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Artist avatar - stable conditional
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            if (selectedArtist != null) Color.Transparent
-                            else MaterialTheme.colorScheme.primary
-                        )
-                ) {
-                    if (selectedArtist != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(selectedArtist.thumbnailUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "Selected artist",
-                            modifier = Modifier.fillMaxSize(),
-                            error = painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Everyone",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(6.dp),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.width(12.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (selectedArtist != null) "Filtering by artist:" else "Artist Filter:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (selectedArtist != null) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                    Text(
-                        text = selectedArtist?.name ?: "Everyone",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = if (selectedArtist != null) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                    if (selectedArtist == null) {
-                        Text(
-                            text = "Songs from all artists",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                
-                // Action button - stable structure
-                IconButton(
-                    onClick = {
-                        if (selectedArtist != null) {
-                            onArtistSelected(null)
-                        } else {
-                            expanded = !expanded
-                        }
-                    }
-                ) {
-                    Icon(
-                        imageVector = if (selectedArtist != null) {
-                            Icons.Default.Clear
-                        } else {
-                            Icons.Default.ArrowDropDown
-                        },
-                        contentDescription = if (selectedArtist != null) {
-                            "Clear artist filter"
-                        } else {
-                            "Search for artist"
-                        },
-                        tint = if (selectedArtist != null) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-            }
-        }
-
-        // Search section - only render when needed, stable structure
-        if (selectedArtist == null && expanded) {
-            OutlinedTextField(
-                value = textFieldValue,
-                onValueChange = { value ->
-                    textFieldValue = value
-                },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Type artist name...") },
-                label = { Text("Search Artists") },
-                singleLine = true,
-                leadingIcon = {
+            singleLine = true,
+            trailingIcon = {
+                Row {
                     if (isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Artist"
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                },
-                trailingIcon = {
-                    IconButton(onClick = {
-                        expanded = false
-                        textFieldValue = ""
-                        onArtistSearchQueryChanged("")
-                    }) {
+                    
+                    if (selectedArtist != null) {
+                        IconButton(
+                            onClick = {
+                                searchQuery = ""
+                                isExpanded = false
+                                isFocused = false
+                                onArtistSelected(null)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear selection"
+                            )
+                        }
+                    }
+                    
+                    IconButton(
+                        onClick = { 
+                            isExpanded = !isExpanded
+                            if (isExpanded) isFocused = true
+                        }
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Clear,
-                            contentDescription = "Close search"
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Show artists"
                         )
                     }
                 }
-            )
+            }
+        )
+        
+        // Dropdown menu
+        DropdownMenu(
+            expanded = isExpanded && (artists.isNotEmpty() || searchQuery.isEmpty()),
+            onDismissRequest = { 
+                isExpanded = false
+                isFocused = false
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // "Everyone" option
+            if (searchQuery.isEmpty() || "everyone".contains(searchQuery.lowercase())) {
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Everyone")
+                        }
+                    },
+                    onClick = {
+                        searchQuery = ""
+                        isExpanded = false
+                        isFocused = false
+                        onArtistSelected(null)
+                    }
+                )
+            }
             
-            // Results dropdown - stable conditional rendering
-            val shouldShowResults = textFieldValue.length >= 2 && artists.isNotEmpty() && !isLoading
-            if (shouldShowResults) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                ) {
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 240.dp)
-                    ) {
-                        items(
-                            items = artists,
-                            key = { it.id }
-                        ) { artist ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        onArtistSelected(artist)
-                                    }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+            // Artist options
+            artists.forEach { artist ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Show artist thumbnail if available, otherwise show artist icon
+                            if (artist.thumbnailUrl.isNotBlank()) {
                                 AsyncImage(
                                     model = ImageRequest.Builder(context)
                                         .data(artist.thumbnailUrl)
                                         .crossfade(true)
                                         .build(),
-                                    contentDescription = "Artist thumbnail",
+                                    contentDescription = "${artist.name} thumbnail",
                                     modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(20.dp)),
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
                                     error = painterResource(id = R.drawable.ic_launcher_foreground),
                                     contentScale = ContentScale.Crop
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = artist.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = artist.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
+                    },
+                    onClick = {
+                        searchQuery = artist.name
+                        isExpanded = false
+                        isFocused = false
+                        onArtistSelected(artist)
                     }
-                }
-            }
-            
-            // Helper text - stable rendering
-            val helperText = when {
-                textFieldValue.isNotEmpty() && textFieldValue.length < 2 ->
-                    "Type at least 2 characters to search for artists"
-                textFieldValue.length >= 2 && artists.isEmpty() && !isLoading ->
-                    "No artists found matching \"$textFieldValue\""
-                else -> null
-            }
-            
-            helperText?.let { text ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
         }
     }
-} 
+}

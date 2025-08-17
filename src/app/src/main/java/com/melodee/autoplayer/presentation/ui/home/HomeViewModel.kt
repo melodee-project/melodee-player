@@ -14,7 +14,9 @@ import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.User
 import com.melodee.autoplayer.domain.model.Artist
+import com.melodee.autoplayer.domain.model.Album
 import com.melodee.autoplayer.service.MusicService
+import com.melodee.autoplayer.util.PerformanceMonitor
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
@@ -28,6 +30,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var context: Context? = null
     private var musicService: MusicService? = null
     private var bound = false
+    private var searchJob: Job? = null
+    private var performanceMonitor: PerformanceMonitor? = null
+    
+    companion object {
+        private const val MAX_SONGS_IN_MEMORY = 500
+        private const val KEEP_SONGS_ON_CLEANUP = 300
+    }
+    
+    private fun updateSongsWithVirtualScrolling(newSongs: List<Song>, isFirstPage: Boolean): List<Song> {
+        return if (isFirstPage) {
+            newSongs
+        } else {
+            val currentSongs = _songs.value
+            val combinedSongs = currentSongs + newSongs
+            
+            // If we exceed memory limit, keep only the most recent songs
+            if (combinedSongs.size > MAX_SONGS_IN_MEMORY) {
+                combinedSongs.takeLast(KEEP_SONGS_ON_CLEANUP) + newSongs
+            } else {
+                combinedSongs
+            }
+        }
+    }
     
     private val _user = MutableStateFlow<User?>(null)
     val user: StateFlow<User?> = _user.asStateFlow()
@@ -55,6 +80,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isArtistLoading = MutableStateFlow(false)
     val isArtistLoading: StateFlow<Boolean> = _isArtistLoading.asStateFlow()
+
+    private val _albums = MutableStateFlow<List<Album>>(emptyList())
+    val albums: StateFlow<List<Album>> = _albums.asStateFlow()
+
+    private val _isAlbumsLoading = MutableStateFlow(false)
+    val isAlbumsLoading: StateFlow<Boolean> = _isAlbumsLoading.asStateFlow()
+
+    private val _showAlbums = MutableStateFlow(false)
+    val showAlbums: StateFlow<Boolean> = _showAlbums.asStateFlow()
+
+    private val _selectedAlbum = MutableStateFlow<Album?>(null)
+    val selectedAlbum: StateFlow<Album?> = _selectedAlbum.asStateFlow()
+
+    private val _showAlbumSongs = MutableStateFlow(false)
+    val showAlbumSongs: StateFlow<Boolean> = _showAlbumSongs.asStateFlow()
 
     private val _totalSearchResults = MutableStateFlow(0)
     val totalSearchResults: StateFlow<Int> = _totalSearchResults.asStateFlow()
@@ -204,7 +244,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             @OptIn(FlowPreview::class)
             _artistSearchQuery
-                .debounce(500) // 0.5 second delay for faster autocomplete
+                .debounce(500) // 500ms debounce as requested
                 .collect { query ->
                     if (query.length >= 2) { // Minimum 2 characters
                         performArtistSearch(query)
@@ -251,13 +291,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadInitialData() {
         viewModelScope.launch {
             try {
-                // TODO: Load user from repository
+                // Load user from stored preferences or repository
+                // For now using default user until proper user management is implemented
                 _user.value = User(
                     id = UUID.randomUUID(),
-                    email = "test@example.com",
-                    thumbnailUrl = "https://example.com/avatar.jpg",
-                    imageUrl = "https://example.com/avatar.jpg",
-                    username = "Test User"
+                    email = "user@melodee.com",
+                    thumbnailUrl = "",
+                    imageUrl = "",
+                    username = "Melodee User"
                 )
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error loading user", e)
@@ -267,6 +308,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setContext(context: Context) {
         this.context = context
+        // Initialize performance monitoring
+        performanceMonitor = PerformanceMonitor.getInstance(context)
+        performanceMonitor?.startMonitoring()
         // Bind to MusicService
         Intent(context, MusicService::class.java).also { intent ->
             context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
@@ -311,6 +355,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         stopProgressUpdates()
+        performanceMonitor?.stopMonitoring()
         if (bound) {
             context?.unbindService(connection)
             bound = false
@@ -400,31 +445,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun performSearch(query: String) {
         if (!hasMoreSongs || repository == null) return
 
-        viewModelScope.launch {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             _isLoading.value = true
             try {
                 val selectedArtistId = _selectedArtist.value?.id?.toString()
                 
-                if (selectedArtistId != null && query.isBlank()) {
-                    // Show all songs for selected artist when no song query
-                    repository?.getArtistSongs(selectedArtistId, currentSearchPage)
-                        ?.catch { _ ->
-                            _isLoading.value = false
-                        }
-                        ?.collect { response ->
-                            _songs.value = if (currentSearchPage == 1) {
-                                response.data
-                            } else {
-                                _songs.value + response.data
-                            }
-                            _totalSearchResults.value = response.meta.totalCount
-                            _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
-                            _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
-                            hasMoreSongs = response.meta.hasNext
-                            currentSearchPage = response.meta.currentPage + 1
-                            _isLoading.value = false
-                        }
-                } else {
+                // Only perform search when query is not blank
+                if (query.isNotBlank()) {
                     // Use appropriate search method based on artist filter
                     if (selectedArtistId != null) {
                         // Search songs with artist filter
@@ -433,11 +461,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                 _isLoading.value = false
                             }
                             ?.collect { response ->
-                                _songs.value = if (currentSearchPage == 1) {
-                                    response.data
-                                } else {
-                                    _songs.value + response.data
-                                }
+                                _songs.value = updateSongsWithVirtualScrolling(response.data, currentSearchPage == 1)
                                 _totalSearchResults.value = response.meta.totalCount
                                 _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
                                 _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
@@ -452,11 +476,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                 _isLoading.value = false
                             }
                             ?.collect { response ->
-                                _songs.value = if (currentSearchPage == 1) {
-                                    response.data
-                                } else {
-                                    _songs.value + response.data
-                                }
+                                _songs.value = updateSongsWithVirtualScrolling(response.data, currentSearchPage == 1)
                                 _totalSearchResults.value = response.meta.totalCount
                                 _currentPageStart.value = if (currentSearchPage == 1) 1 else _currentPageEnd.value + 1
                                 _currentPageEnd.value = _currentPageStart.value + response.data.size - 1
@@ -627,6 +647,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _currentDuration.value = 0L
         _isLoading.value = false
         
+        // Reset album/artist view states to return to normal playlist view
+        _albums.value = emptyList()
+        _isAlbumsLoading.value = false
+        _showAlbums.value = false
+        _selectedAlbum.value = null
+        _showAlbumSongs.value = false
+        
         // Reset pagination
         currentPage = 1
         hasMorePlaylists = true
@@ -748,18 +775,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         currentSearchPage = 1
         hasMoreSongs = true
         
-        // If artist is selected and no search query, load all artist songs
-        if (artist != null && _searchQuery.value.isBlank()) {
-            performSearch("")
-        } else if (artist != null && _searchQuery.value.isNotBlank()) {
-            // Re-search with the new artist filter
+        // When artist is selected with existing search text: Re-filter with artist constraint
+        if (artist != null && _searchQuery.value.isNotBlank()) {
             performSearch(_searchQuery.value)
-        } else if (artist == null) {
-            // Reset to "Everyone" - if there's a search query, re-search without artist filter
-            if (_searchQuery.value.isNotBlank()) {
-                performSearch(_searchQuery.value)
-            }
+        } else if (artist == null && _searchQuery.value.isNotBlank()) {
+            // Reset to "Everyone" - re-search across all artists
+            performSearch(_searchQuery.value)
         }
+        // When artist is selected with no search text: Show empty list (no automatic loading)
+        // When artist is cleared with no search text: Show empty list
     }
 
     fun refreshPlaylists() {
@@ -768,5 +792,106 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         hasMorePlaylists = true
         _playlists.value = emptyList()
         loadPlaylists()
+    }
+
+    fun browseArtistAlbums() {
+        val artist = _selectedArtist.value ?: return
+        
+        _showAlbums.value = true
+        _albums.value = emptyList()
+        _isAlbumsLoading.value = true
+        
+        viewModelScope.launch {
+            try {
+                repository?.getArtistAlbums(artist.id.toString(), 1)
+                    ?.catch { _ ->
+                        _isAlbumsLoading.value = false
+                    }
+                    ?.collect { response ->
+                        _albums.value = response.data
+                        _isAlbumsLoading.value = false
+                    }
+            } catch (e: Exception) {
+                _isAlbumsLoading.value = false
+                Log.e("HomeViewModel", "Error loading artist albums", e)
+            }
+        }
+    }
+
+    fun hideAlbums() {
+        _showAlbums.value = false
+        _albums.value = emptyList()
+        _selectedAlbum.value = null
+        _showAlbumSongs.value = false
+    }
+
+    fun browseAlbumSongs(album: Album) {
+        _selectedAlbum.value = album
+        _showAlbumSongs.value = true
+        _showAlbums.value = false
+        _songs.value = emptyList()
+        
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                repository?.getAlbumSongs(album.id.toString(), 1)
+                    ?.catch { _ ->
+                        _isLoading.value = false
+                    }
+                    ?.collect { response ->
+                        _songs.value = response.data
+                        _totalSearchResults.value = response.meta.totalCount
+                        _currentPageStart.value = 1
+                        _currentPageEnd.value = response.data.size
+                        hasMoreSongs = response.meta.hasNext
+                        currentSearchPage = response.meta.currentPage + 1
+                        _isLoading.value = false
+                    }
+            } catch (e: Exception) {
+                _isLoading.value = false
+                Log.e("HomeViewModel", "Error loading album songs", e)
+            }
+        }
+    }
+
+    fun hideAlbumSongs() {
+        _showAlbumSongs.value = false
+        _selectedAlbum.value = null
+        _songs.value = emptyList()
+        // Return to albums view
+        _showAlbums.value = true
+    }
+
+    fun browseArtistSongs() {
+        val artist = _selectedArtist.value ?: return
+        
+        // Clear current songs and search
+        _songs.value = emptyList()
+        _searchQuery.value = ""
+        currentSearchPage = 1
+        hasMoreSongs = true
+        
+        // Load all songs for this artist
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                repository?.getArtistSongs(artist.id.toString(), 1)
+                    ?.catch { _ ->
+                        _isLoading.value = false
+                    }
+                    ?.collect { response ->
+                        _songs.value = response.data
+                        _totalSearchResults.value = response.meta.totalCount
+                        _currentPageStart.value = 1
+                        _currentPageEnd.value = response.data.size
+                        hasMoreSongs = response.meta.hasNext
+                        currentSearchPage = response.meta.currentPage + 1
+                        _isLoading.value = false
+                    }
+            } catch (e: Exception) {
+                _isLoading.value = false
+                Log.e("HomeViewModel", "Error loading artist songs", e)
+            }
+        }
     }
 }

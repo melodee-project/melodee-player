@@ -6,7 +6,7 @@ import com.melodee.autoplayer.domain.model.Song
 import kotlinx.coroutines.flow.Flow
 
 class SearchSongsUseCase(private val repository: MusicRepository) {
-    operator fun invoke(query: String, page: Int = 1): Flow<PaginatedResponse<Song>> {
+    suspend operator fun invoke(query: String, page: Int = 1): Flow<PaginatedResponse<Song>> {
         return repository.searchSongs(query, page)
     }
 } 
