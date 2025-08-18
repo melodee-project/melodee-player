@@ -749,7 +749,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _isArtistLoading.value = true
             try {
                 repository?.searchArtists(query, 1) // Always search from page 1 for autocomplete
-                    ?.catch { _ ->
+                    ?.catch { e ->
+                        Log.e("HomeViewModel", "Error searching artists: ${e.message}")
                         _isArtistLoading.value = false
                     }
                     ?.collect { response ->
@@ -757,7 +758,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _isArtistLoading.value = false
                     }
             } catch (e: Exception) {
-                Log.e("HomeViewModel", "Error searching artists", e)
+                Log.e("HomeViewModel", "Exception searching artists: ${e.message}")
                 _isArtistLoading.value = false
             }
         }
@@ -774,6 +775,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _songs.value = emptyList()
         currentSearchPage = 1
         hasMoreSongs = true
+        
+        // Clear album view states when artist changes
+        _albums.value = emptyList()
+        _isAlbumsLoading.value = false
+        _showAlbums.value = false
+        _selectedAlbum.value = null
+        _showAlbumSongs.value = false
+        
+        // If artist is being cleared (set to null), clear the artist results but keep search capability
+        if (artist == null) {
+            _artists.value = emptyList()
+            _isArtistLoading.value = false
+        }
         
         // When artist is selected with existing search text: Re-filter with artist constraint
         if (artist != null && _searchQuery.value.isNotBlank()) {

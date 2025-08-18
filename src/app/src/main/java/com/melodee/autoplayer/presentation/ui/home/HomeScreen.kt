@@ -194,7 +194,7 @@ fun HomeScreen(
     }
 
     Scaffold(
-    ) { paddingValues ->
+    ) { _ ->
         // Mobile layout
             Column(
                 modifier = Modifier
@@ -465,12 +465,6 @@ private fun PlaylistItem(
 ) {
     val context = LocalContext.current
     
-    // Enhanced logging for playlist thumbnail
-    LaunchedEffect(playlist.thumbnailUrl) {
-        Log.d("HomeScreen", "Playlist: ${playlist.name}")
-        Log.d("HomeScreen", "Thumbnail URL: ${playlist.thumbnailUrl}")
-        Log.d("HomeScreen", "URL valid: ${playlist.thumbnailUrl.isNotBlank()}")
-    }
 
     Card(
         modifier = Modifier
@@ -489,29 +483,14 @@ private fun PlaylistItem(
                     .data(playlist.thumbnailUrl)
                     .crossfade(true)
                     .listener(
-                        onStart = {
-                            Log.d("HomeScreen", "Starting to load playlist image: ${playlist.thumbnailUrl}")
-                        },
-                        onSuccess = { _, result ->
-                            Log.d("HomeScreen", "Successfully loaded playlist image: ${playlist.thumbnailUrl}")
-                            Log.d("HomeScreen", "Image size: ${result.drawable.intrinsicWidth}x${result.drawable.intrinsicHeight}")
-                        },
                         onError = { _, result ->
-                            Log.e("HomeScreen", "Failed to load playlist image: ${playlist.thumbnailUrl}")
-                            Log.e("HomeScreen", "Error: ${result.throwable}")
-                            result.throwable.printStackTrace()
+                            Log.e("HomeScreen", "Failed to load playlist image: ${result.throwable.message}")
                         }
                     )
                     .build(),
                 contentDescription = "Playlist thumbnail",
                 modifier = Modifier.size(64.dp),
                 error = painterResource(id = R.drawable.ic_launcher_foreground),
-                onError = {
-                    Log.e("HomeScreen", "Failed to load playlist image: ${playlist.thumbnailUrl}")
-                },
-                onSuccess = {
-                    Log.d("HomeScreen", "Successfully loaded playlist image: ${playlist.thumbnailUrl}")
-                },
                 contentScale = ContentScale.Crop
             )
             Spacer(modifier = Modifier.width(16.dp))
@@ -556,8 +535,8 @@ private fun ArtistAutocomplete(
                 searchQuery = query
                 // Immediately call the ViewModel (which has the 500ms debouncing)
                 onArtistSearchQueryChanged(query)
-                // Expand dropdown when focused and has content or results
-                isExpanded = isFocused && (query.isNotEmpty() || artists.isNotEmpty())
+                // Expand dropdown when focused and typing
+                isExpanded = isFocused && query.isNotEmpty()
             },
             label = { Text("Filter by Artist") },
             placeholder = { Text("Search artists or select 'Everyone'") },
@@ -566,7 +545,9 @@ private fun ArtistAutocomplete(
                 .onFocusChanged { focusState ->
                     isFocused = focusState.isFocused
                     if (focusState.isFocused) {
-                        isExpanded = searchQuery.isNotEmpty() || artists.isNotEmpty()
+                        isExpanded = searchQuery.isNotEmpty()
+                    } else {
+                        isExpanded = false
                     }
                 },
             singleLine = true,
@@ -586,7 +567,10 @@ private fun ArtistAutocomplete(
                                 searchQuery = ""
                                 isExpanded = false
                                 isFocused = false
+                                // First clear the artist selection
                                 onArtistSelected(null)
+                                // Then clear the search query to ensure fresh state
+                                onArtistSearchQueryChanged("")
                             }
                         ) {
                             Icon(
@@ -613,7 +597,7 @@ private fun ArtistAutocomplete(
         
         // Dropdown menu
         DropdownMenu(
-            expanded = isExpanded && (artists.isNotEmpty() || searchQuery.isEmpty()),
+            expanded = isExpanded,
             onDismissRequest = { 
                 isExpanded = false
                 isFocused = false
@@ -640,7 +624,10 @@ private fun ArtistAutocomplete(
                         searchQuery = ""
                         isExpanded = false
                         isFocused = false
+                        // First clear the artist selection
                         onArtistSelected(null)
+                        // Then clear the search query to ensure fresh state
+                        onArtistSearchQueryChanged("")
                     }
                 )
             }
@@ -658,6 +645,11 @@ private fun ArtistAutocomplete(
                                     model = ImageRequest.Builder(context)
                                         .data(artist.thumbnailUrl)
                                         .crossfade(true)
+                                        .listener(
+                                            onError = { _, result ->
+                                                Log.e("HomeScreen", "Failed to load artist thumbnail for ${artist.name}: ${result.throwable.message}")
+                                            }
+                                        )
                                         .build(),
                                     contentDescription = "${artist.name} thumbnail",
                                     modifier = Modifier
