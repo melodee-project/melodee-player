@@ -110,6 +110,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    
+    // Keep track of the currently playing song, independent of UI state
+    private val _currentPlayingSong = MutableStateFlow<Song?>(null)
+    val currentPlayingSong: StateFlow<Song?> = _currentPlayingSong.asStateFlow()
 
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
@@ -167,21 +171,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val playbackContext = service.getCurrentPlaybackContext()
                     Log.d("HomeViewModel", "Current playback context: $playbackContext")
                     
-                    if (song != null && playbackContext == MusicService.PlaybackContext.SEARCH) {
-                        // Find the song in our current search results and update the index
+                    if (song != null) {
+                        // Update the currently playing song regardless of context
+                        _currentPlayingSong.value = song
+                        
+                        // Find the song in our current songs list and update the index
                         val index = _songs.value.indexOf(song)
                         if (index >= 0) {
-                            Log.d("HomeViewModel", "Found song in search results at index: $index (SEARCH context)")
+                            Log.d("HomeViewModel", "Found song in HomeViewModel songs at index: $index (context: $playbackContext)")
                             // Update both index and playing state to ensure mini player shows
                             _currentSongIndex.value = index
                             _isPlaying.value = service.isPlaying()
                             Log.d("HomeViewModel", "Updated currentSongIndex to: $index, isPlaying: ${_isPlaying.value}")
                         } else {
-                            Log.d("HomeViewModel", "Song not found in current search results")
+                            Log.d("HomeViewModel", "Song not found in current HomeViewModel songs")
+                            // Song is playing but not in our current view (different context)
+                            if (playbackContext != MusicService.PlaybackContext.SEARCH && 
+                                playbackContext != MusicService.PlaybackContext.PLAYLIST) {
+                                // Only reset if it's a completely different context (not search or playlist)
+                                _currentSongIndex.value = -1
+                                _isPlaying.value = false
+                                Log.d("HomeViewModel", "Different playback context ($playbackContext), resetting home state")
+                            }
                         }
-                    } else if (playbackContext != MusicService.PlaybackContext.SEARCH) {
-                        Log.d("HomeViewModel", "Playback context is not SEARCH ($playbackContext), resetting home state")
-                        // If playback context is not SEARCH, reset our state
+                    } else if (playbackContext != MusicService.PlaybackContext.SEARCH && 
+                              playbackContext != MusicService.PlaybackContext.PLAYLIST) {
+                        Log.d("HomeViewModel", "Playback context is not SEARCH/PLAYLIST ($playbackContext), resetting home state")
+                        // If playback context is completely different, reset our state
                         _currentSongIndex.value = -1
                         _isPlaying.value = false
                     } else {
@@ -203,15 +219,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val isServicePlaying = service.isPlaying()
                     val playbackContext = service.getCurrentPlaybackContext()
                     
-                    // Only update if we're in SEARCH context and there's a meaningful change
-                    if (playbackContext == MusicService.PlaybackContext.SEARCH && 
+                    // Update if we're in SEARCH/PLAYLIST context and there's a meaningful change
+                    if ((playbackContext == MusicService.PlaybackContext.SEARCH || 
+                         playbackContext == MusicService.PlaybackContext.PLAYLIST) &&
                         _currentSongIndex.value >= 0 && 
                         _isPlaying.value != isServicePlaying) {
-                        Log.d("HomeViewModel", "Service playing state changed: $isServicePlaying (was: ${_isPlaying.value}) in SEARCH context")
+                        Log.d("HomeViewModel", "Service playing state changed: $isServicePlaying (was: ${_isPlaying.value}) in $playbackContext context")
                         _isPlaying.value = isServicePlaying
                         Log.d("HomeViewModel", "Updated isPlaying from service: $isServicePlaying")
-                    } else if (playbackContext != MusicService.PlaybackContext.SEARCH && _isPlaying.value) {
-                        Log.d("HomeViewModel", "Playback context changed from SEARCH to $playbackContext, stopping home playback state")
+                    } else if (playbackContext != MusicService.PlaybackContext.SEARCH && 
+                              playbackContext != MusicService.PlaybackContext.PLAYLIST && 
+                              _isPlaying.value) {
+                        Log.d("HomeViewModel", "Playback context changed to $playbackContext, stopping home playback state")
                         _isPlaying.value = false
                         _currentSongIndex.value = -1
                     }
@@ -525,6 +544,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             Log.d("HomeViewModel", "Setting state - currentSongIndex: $index, isPlaying: true")
             _currentSongIndex.value = index
             _isPlaying.value = true
+            _currentPlayingSong.value = song  // Store the currently playing song
             
             Log.d("HomeViewModel", "State after setting - currentSongIndex: ${_currentSongIndex.value}, isPlaying: ${_isPlaying.value}")
             

@@ -294,6 +294,7 @@ fun MainScreen(
     val homeCurrentIndex by homeViewModel.currentSongIndex.collectAsStateWithLifecycle()
     val homeIsPlaying by homeViewModel.isPlaying.collectAsStateWithLifecycle()
     val homeProgress by homeViewModel.playbackProgress.collectAsStateWithLifecycle()
+    val homeCurrentPlayingSong by homeViewModel.currentPlayingSong.collectAsStateWithLifecycle()
     
     val playlistCurrentSong by playlistViewModel.currentSong.collectAsStateWithLifecycle()
     val playlistIsPlaying by playlistViewModel.isPlaying.collectAsStateWithLifecycle()
@@ -309,9 +310,15 @@ fun MainScreen(
     }
     
     // Determine global playback state - now that ViewModels are context-aware, this is simpler
-    val globalCurrentSong = remember(homeCurrentSongs, homeCurrentIndex, homeIsPlaying, playlistCurrentSong, playlistIsPlaying) {
+    val globalCurrentSong = remember(homeCurrentSongs, homeCurrentIndex, homeIsPlaying, homeCurrentPlayingSong, playlistCurrentSong, playlistIsPlaying) {
         val result = when {
-            // Home search results if playing and valid
+            // Home playing from service - this works even when browsing albums
+            homeCurrentPlayingSong != null && homeIsPlaying -> {
+                val song = homeCurrentPlayingSong
+                Log.d("MainActivity", "Using home current playing song: ${song?.title}")
+                song
+            }
+            // Home search results if playing and valid (fallback for older state)
             homeIsPlaying && homeCurrentIndex >= 0 && homeCurrentIndex < homeCurrentSongs.size -> {
                 val song = homeCurrentSongs[homeCurrentIndex]
                 Log.d("MainActivity", "Using home search song: ${song.title}")
@@ -323,7 +330,13 @@ fun MainScreen(
                 Log.d("MainActivity", "Using playlist song: ${song?.title}")
                 song
             }
-            // Fallback: show home song even if not playing (paused state)
+            // Paused states - show last known song
+            homeCurrentPlayingSong != null -> {
+                val song = homeCurrentPlayingSong
+                Log.d("MainActivity", "Using home current playing song (paused): ${song?.title}")
+                song
+            }
+            // Fallback: show home song from search results (paused state)
             homeCurrentIndex >= 0 && homeCurrentIndex < homeCurrentSongs.size -> {
                 val song = homeCurrentSongs[homeCurrentIndex]
                 Log.d("MainActivity", "Using home search song (paused): ${song.title}")

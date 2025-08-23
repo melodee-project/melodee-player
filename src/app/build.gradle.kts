@@ -12,8 +12,8 @@ android {
         applicationId = "com.melodee.autoplayer"
         minSdk = 21
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.5.0"
+        versionCode = 11
+        versionName = "1.5.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

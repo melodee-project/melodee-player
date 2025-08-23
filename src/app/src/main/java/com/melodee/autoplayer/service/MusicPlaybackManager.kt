@@ -96,17 +96,26 @@ class MusicPlaybackManager(private val context: Context) {
         _currentQueue.value = songs
         _playbackContext.value = context
         
-        if (songs.isNotEmpty() && startIndex < songs.size) {
-            _currentIndex.value = startIndex
-            _currentSong.value = songs[startIndex]
+        if (songs.isNotEmpty()) {
+            // Ensure startIndex is valid - if invalid, default to 0
+            val validStartIndex = when {
+                startIndex < 0 -> 0
+                startIndex >= songs.size -> 0
+                else -> startIndex
+            }
+            
+            _currentIndex.value = validStartIndex
+            _currentSong.value = songs[validStartIndex]
+            Logger.d("MusicPlaybackManager", "Set current song to index $validStartIndex: ${songs[validStartIndex].title}")
             
             // If shuffle is enabled, create new shuffle order starting with the selected song
             if (_isShuffleEnabled.value) {
-                createShuffleOrder(startIndex)
+                createShuffleOrder(validStartIndex)
             }
         } else {
             _currentIndex.value = -1
             _currentSong.value = null
+            Logger.d("MusicPlaybackManager", "Empty queue - no current song set")
         }
         
         Logger.logPerformance("MusicPlaybackManager", "QueueSize", songs.size)

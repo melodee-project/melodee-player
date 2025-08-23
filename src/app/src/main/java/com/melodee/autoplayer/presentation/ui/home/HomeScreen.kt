@@ -523,9 +523,28 @@ private fun ArtistAutocomplete(
     var isExpanded by remember { mutableStateOf(false) }
     var isFocused by remember { mutableStateOf(false) }
     
-    // Update search query when selectedArtist changes
+    // Update search query when selectedArtist changes - but don't trigger during typing
     LaunchedEffect(selectedArtist) {
-        searchQuery = selectedArtist?.name ?: ""
+        if (!isFocused) {  // Only update when not actively typing
+            searchQuery = selectedArtist?.name ?: ""
+        }
+    }
+    
+    // Stable derived state for showing dropdown
+    val shouldShowDropdown by remember {
+        derivedStateOf {
+            isExpanded && (searchQuery.isNotEmpty() || selectedArtist == null)
+        }
+    }
+    
+    // Debounced search - only call ViewModel after user stops typing
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.length >= 2) {
+            delay(300) // Shorter delay for better UX
+            onArtistSearchQueryChanged(searchQuery)
+        } else if (searchQuery.isEmpty()) {
+            onArtistSearchQueryChanged("")
+        }
     }
     
     Column(modifier = modifier) {
@@ -533,10 +552,8 @@ private fun ArtistAutocomplete(
             value = searchQuery,
             onValueChange = { query ->
                 searchQuery = query
-                // Immediately call the ViewModel (which has the 500ms debouncing)
-                onArtistSearchQueryChanged(query)
-                // Expand dropdown when focused and typing
-                isExpanded = isFocused && query.isNotEmpty()
+                // Show dropdown when typing - debounced search happens in LaunchedEffect
+                isExpanded = true
             },
             label = { Text("Filter by Artist") },
             placeholder = { Text("Search artists or select 'Everyone'") },
@@ -545,6 +562,7 @@ private fun ArtistAutocomplete(
                 .onFocusChanged { focusState ->
                     isFocused = focusState.isFocused
                     if (focusState.isFocused) {
+                        // Show dropdown if there's text to search
                         isExpanded = searchQuery.isNotEmpty()
                     } else {
                         isExpanded = false
@@ -553,10 +571,11 @@ private fun ArtistAutocomplete(
             singleLine = true,
             trailingIcon = {
                 Row {
-                    if (isLoading) {
+                    if (isLoading && searchQuery.length >= 2) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -595,92 +614,139 @@ private fun ArtistAutocomplete(
             }
         )
         
-        // Dropdown menu
-        DropdownMenu(
-            expanded = isExpanded,
-            onDismissRequest = { 
-                isExpanded = false
-                isFocused = false
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            // "Everyone" option
-            if (searchQuery.isEmpty() || "everyone".contains(searchQuery.lowercase())) {
-                DropdownMenuItem(
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Everyone")
-                        }
-                    },
-                    onClick = {
-                        searchQuery = ""
-                        isExpanded = false
-                        isFocused = false
-                        // First clear the artist selection
-                        onArtistSelected(null)
-                        // Then clear the search query to ensure fresh state
-                        onArtistSearchQueryChanged("")
-                    }
-                )
-            }
-            
-            // Artist options
-            artists.forEach { artist ->
-                DropdownMenuItem(
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Show artist thumbnail if available, otherwise show artist icon
-                            if (artist.thumbnailUrl.isNotBlank()) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(artist.thumbnailUrl)
-                                        .crossfade(true)
-                                        .listener(
-                                            onError = { _, result ->
-                                                Log.e("HomeScreen", "Failed to load artist thumbnail for ${artist.name}: ${result.throwable.message}")
-                                            }
-                                        )
-                                        .build(),
-                                    contentDescription = "${artist.name} thumbnail",
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .clip(RoundedCornerShape(10.dp)),
-                                    error = painterResource(id = R.drawable.ic_launcher_foreground),
-                                    contentScale = ContentScale.Crop
+        // Custom dropdown overlay that doesn't capture focus
+        if (shouldShowDropdown) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Loading indicator
+                    if (isLoading && searchQuery.length >= 2) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                                 )
-                            } else {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Searching artists...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Show "Everyone" option when not loading or when no specific search
+                    if (!isLoading && (searchQuery.isEmpty() || "everyone".contains(searchQuery.lowercase()))) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        searchQuery = ""
+                                        isExpanded = false
+                                        // First clear the artist selection
+                                        onArtistSelected(null)
+                                        // Then clear the search query to ensure fresh state
+                                        onArtistSearchQueryChanged("")
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Person,
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Everyone")
+                            }
+                        }
+                    }
+                    
+                    // Artist options - only show when not loading
+                    if (!isLoading) {
+                        items(artists) { artist ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        searchQuery = artist.name
+                                        isExpanded = false
+                                        onArtistSelected(artist)
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Show artist thumbnail if available, otherwise show artist icon
+                                if (artist.thumbnailUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context)
+                                            .data(artist.thumbnailUrl)
+                                            .crossfade(true)
+                                            .listener(
+                                                onError = { _, result ->
+                                                    Log.e("HomeScreen", "Failed to load artist thumbnail for ${artist.name}: ${result.throwable.message}")
+                                                }
+                                            )
+                                            .build(),
+                                        contentDescription = "${artist.name} thumbnail",
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        error = painterResource(id = R.drawable.ic_launcher_foreground),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = artist.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = artist.name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
                         }
-                    },
-                    onClick = {
-                        searchQuery = artist.name
-                        isExpanded = false
-                        isFocused = false
-                        onArtistSelected(artist)
                     }
-                )
+                    
+                    // No results message
+                    if (!isLoading && searchQuery.length >= 2 && artists.isEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "No artists found",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
