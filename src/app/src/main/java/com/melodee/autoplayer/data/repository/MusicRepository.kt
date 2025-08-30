@@ -103,9 +103,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
     }
 
     fun searchSongsWithArtist(query: String, artistId: String?, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
-        val response = ErrorHandler.handleOperation(context, "searchSongsWithArtist", "MusicRepository") {
-            api.searchSongsWithArtist(query, artistId, page)
-        }
+        val response = api.searchSongsWithArtist(query, artistId, page)
         emit(response)
     }
 
@@ -117,4 +115,4 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
             false
         }
     }
-} 
+}
