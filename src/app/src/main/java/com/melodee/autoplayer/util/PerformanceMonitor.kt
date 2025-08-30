@@ -71,6 +71,9 @@ class PerformanceMonitor(private val context: Context) {
                     }
                     
                     delay(intervalMs)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Normal during shutdown; no error logging
+                    return@launch
                 } catch (e: Exception) {
                     Logger.e("PerformanceMonitor", "Error in memory monitoring", e)
                     delay(intervalMs)

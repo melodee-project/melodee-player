@@ -173,6 +173,7 @@ data class PaletteOption(
 )
 
 private fun getPaletteOptions(): List<PaletteOption> = listOf(
+    // Keep signature brand first
     PaletteOption(
         palette = ThemePalette.DEFAULT,
         name = "Melodee Purple",
@@ -181,6 +182,24 @@ private fun getPaletteOptions(): List<PaletteOption> = listOf(
         secondaryColor = MelodeeColors.Blue60,
         tertiaryColor = MelodeeColors.Orange60
     ),
+    // Surface requested palettes near the top
+    PaletteOption(
+        palette = ThemePalette.MUSIC_GREEN,
+        name = "Music Green",
+        description = "Fresh green palette inspired by music and nature",
+        primaryColor = AlternativePalettes.MusicGreen.Primary60,
+        secondaryColor = MelodeeColors.Orange60,
+        tertiaryColor = MelodeeColors.Purple60
+    ),
+    PaletteOption(
+        palette = ThemePalette.BUBBLEGUM,
+        name = "Bubblegum",
+        description = "A pink candy-coated nightmare — maximum bubblegum energy",
+        primaryColor = AlternativePalettes.Bubblegum.Pink60,
+        secondaryColor = AlternativePalettes.Bubblegum.CandyBlue50,
+        tertiaryColor = AlternativePalettes.Bubblegum.Lavender50
+    ),
+    // Other options
     PaletteOption(
         palette = ThemePalette.PRIMARY_COLORS,
         name = "Primary Colors",
@@ -206,12 +225,12 @@ private fun getPaletteOptions(): List<PaletteOption> = listOf(
         tertiaryColor = AlternativePalettes.WinAmpClassic.EQGreen
     ),
     PaletteOption(
-        palette = ThemePalette.MUSIC_GREEN,
-        name = "Music Green",
-        description = "Fresh green palette inspired by music and nature",
-        primaryColor = AlternativePalettes.MusicGreen.Primary60,
-        secondaryColor = MelodeeColors.Orange60,
-        tertiaryColor = MelodeeColors.Purple60
+        palette = ThemePalette.JUST_GREY,
+        name = "Just Grey",
+        description = "Monochrome minimalism in layered greys",
+        primaryColor = AlternativePalettes.JustGrey.Grey50,
+        secondaryColor = AlternativePalettes.JustGrey.Grey70,
+        tertiaryColor = AlternativePalettes.JustGrey.Grey40
     ),
     PaletteOption(
         palette = ThemePalette.DYNAMIC,
@@ -220,22 +239,6 @@ private fun getPaletteOptions(): List<PaletteOption> = listOf(
         primaryColor = Color(0xFF6750A4),
         secondaryColor = Color(0xFF625B71),
         tertiaryColor = Color(0xFF7D5260)
-    ),
-    PaletteOption(
-        palette = ThemePalette.BUBBLEGUM,
-        name = "Bubblegum",
-        description = "A pink candy-coated nightmare — maximum bubblegum energy",
-        primaryColor = AlternativePalettes.Bubblegum.Pink60,
-        secondaryColor = AlternativePalettes.Bubblegum.CandyBlue50,
-        tertiaryColor = AlternativePalettes.Bubblegum.Lavender50
-    ),
-    PaletteOption(
-        palette = ThemePalette.JUST_GREY,
-        name = "Just Grey",
-        description = "Monochrome minimalism in layered greys",
-        primaryColor = AlternativePalettes.JustGrey.Grey50,
-        secondaryColor = AlternativePalettes.JustGrey.Grey70,
-        tertiaryColor = AlternativePalettes.JustGrey.Grey40
     )
 )
 

@@ -111,7 +111,11 @@ private val MusicGreenLightColorScheme = lightColorScheme(
     tertiary = MelodeeColors.Purple60,
     onTertiary = MelodeeColors.Purple99,
     tertiaryContainer = MelodeeColors.Purple90,
-    onTertiaryContainer = MelodeeColors.Purple10
+    onTertiaryContainer = MelodeeColors.Purple10,
+    background = AlternativePalettes.MusicGreen.Primary99,
+    onBackground = AlternativePalettes.MusicGreen.Primary10,
+    surface = AlternativePalettes.MusicGreen.Primary95,
+    onSurface = AlternativePalettes.MusicGreen.Primary20
 )
 
 private val MusicGreenDarkColorScheme = darkColorScheme(
@@ -126,7 +130,11 @@ private val MusicGreenDarkColorScheme = darkColorScheme(
     tertiary = MelodeeColors.Purple80,
     onTertiary = MelodeeColors.Purple20,
     tertiaryContainer = MelodeeColors.Purple30,
-    onTertiaryContainer = MelodeeColors.Purple90
+    onTertiaryContainer = MelodeeColors.Purple90,
+    background = AlternativePalettes.MusicGreen.Primary10,
+    onBackground = AlternativePalettes.MusicGreen.Primary90,
+    surface = AlternativePalettes.MusicGreen.Primary20,
+    onSurface = AlternativePalettes.MusicGreen.Primary90
 )
 
 // Theme Selection Enum
@@ -206,7 +214,11 @@ private val PrimaryColorsLightColorScheme = lightColorScheme(
     tertiary = AlternativePalettes.PrimaryColors.Tertiary50,
     onTertiary = AlternativePalettes.PrimaryColors.Tertiary99,
     tertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary90,
-    onTertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary10
+    onTertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary10,
+    background = MelodeeColors.Neutral99,
+    onBackground = MelodeeColors.Neutral10,
+    surface = MelodeeColors.Neutral99,
+    onSurface = MelodeeColors.Neutral10
 )
 
 private val PrimaryColorsDarkColorScheme = darkColorScheme(
@@ -222,6 +234,10 @@ private val PrimaryColorsDarkColorScheme = darkColorScheme(
     onTertiary = AlternativePalettes.PrimaryColors.Tertiary20,
     tertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary30,
     onTertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary90,
+    background = MelodeeColors.Neutral10,
+    onBackground = MelodeeColors.Neutral90,
+    surface = MelodeeColors.Neutral10,
+    onSurface = MelodeeColors.Neutral90,
 )
 
 // 80s Retro Theme
@@ -238,6 +254,10 @@ private val Retro80sLightColorScheme = lightColorScheme(
     onTertiary = MelodeeColors.Neutral10,
     tertiaryContainer = AlternativePalettes.Retro80s.Tertiary90,
     onTertiaryContainer = AlternativePalettes.Retro80s.Tertiary20,
+    background = Color(0xFFFFF5FC),
+    onBackground = MelodeeColors.Neutral10,
+    surface = Color(0xFFFFEAF7),
+    onSurface = MelodeeColors.Neutral10,
 )
 
 private val Retro80sDarkColorScheme = darkColorScheme(
@@ -273,7 +293,11 @@ private val WinAmpLightColorScheme = lightColorScheme(
     tertiary = AlternativePalettes.WinAmpClassic.EQGreen,
     onTertiary = MelodeeColors.Neutral10,
     tertiaryContainer = Color(0xFFD6FFD6),
-    onTertiaryContainer = Color(0xFF005500)
+    onTertiaryContainer = Color(0xFF005500),
+    background = Color(0xFFFFFBF2),
+    onBackground = MelodeeColors.Neutral10,
+    surface = Color(0xFFFFF4CC),
+    onSurface = MelodeeColors.Neutral10
 )
 
 private val WinAmpDarkColorScheme = darkColorScheme(
@@ -308,6 +332,10 @@ private val BubblegumLightColorScheme = lightColorScheme(
     onTertiary = MelodeeColors.Neutral10,
     tertiaryContainer = AlternativePalettes.Bubblegum.Lavender80,
     onTertiaryContainer = AlternativePalettes.Bubblegum.Pink20,
+    background = AlternativePalettes.Bubblegum.Pink99,
+    onBackground = AlternativePalettes.Bubblegum.Pink20,
+    surface = AlternativePalettes.Bubblegum.Pink90,
+    onSurface = AlternativePalettes.Bubblegum.Pink20,
 )
 
 private val BubblegumDarkColorScheme = darkColorScheme(

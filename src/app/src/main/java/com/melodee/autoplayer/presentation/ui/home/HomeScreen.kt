@@ -60,6 +60,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.delay
+import com.melodee.autoplayer.util.hasNotificationListenerAccess
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,15 +75,19 @@ fun HomeScreen(
     var musicService by remember { mutableStateOf<MediaSessionManager?>(null) }
     var mediaController by remember { mutableStateOf<MediaController?>(null) }
 
-    // Set up media session monitoring
+    // Set up media session monitoring (only if app has notification listener access)
     LaunchedEffect(Unit) {
         viewModel.setContext(context)
-        try {
-            musicService = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
-            val controller = musicService?.getActiveSessions(null)?.firstOrNull()
-            mediaController = controller?.let { MediaController(context, it.sessionToken) }
-        } catch (e: SecurityException) {
-            Log.e("HomeScreen", "Failed to get media session: ${e.message}")
+        if (hasNotificationListenerAccess(context)) {
+            try {
+                musicService = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                val controller = musicService?.getActiveSessions(null)?.firstOrNull()
+                mediaController = controller?.let { MediaController(context, it.sessionToken) }
+            } catch (e: SecurityException) {
+                Log.w("HomeScreen", "No access to media sessions (notification access not granted)")
+            }
+        } else {
+            Log.i("HomeScreen", "Notification listener access not granted; skipping active session binding")
         }
     }
 
@@ -111,14 +116,16 @@ fun HomeScreen(
     val permissionState = rememberPermissionState(
         context = context,
         onPermissionGranted = {
-            try {
-                musicService = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
-                val controller = musicService?.getActiveSessions(null)?.firstOrNull()
-                mediaController = controller?.let { MediaController(context, it.sessionToken) }
-            } catch (e: SecurityException) {
-                Log.e("HomeScreen", "Failed to get media session: ${e.message}")
-                musicService = null
-                mediaController = null
+            if (hasNotificationListenerAccess(context)) {
+                try {
+                    musicService = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                    val controller = musicService?.getActiveSessions(null)?.firstOrNull()
+                    mediaController = controller?.let { MediaController(context, it.sessionToken) }
+                } catch (e: SecurityException) {
+                    Log.w("HomeScreen", "No access to media sessions (notification access not granted)")
+                    musicService = null
+                    mediaController = null
+                }
             }
         }
     )
@@ -330,28 +337,31 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             if (searchQuery.isNotEmpty() && songs.isNotEmpty()) {
-                                Text(
-                                    text = "Displaying $currentPageStart to $currentPageEnd of $totalSearchResults results",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                    start = currentPageStart,
+                                    end = currentPageEnd,
+                                    total = totalSearchResults,
+                                    label = "results"
                                 )
                             }
                             
                             // Album songs position indicator (above the list)
                             if (showAlbumSongs && songs.isNotEmpty() && totalSearchResults > 0) {
-                                Text(
-                                    text = "Displaying $currentPageStart to $currentPageEnd of $totalSearchResults songs",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                    start = currentPageStart,
+                                    end = currentPageEnd,
+                                    total = totalSearchResults,
+                                    label = "songs"
                                 )
                             }
                             
                             // Album position indicator (above the list)
                             if (showAlbums && albums.isNotEmpty() && totalAlbums > 0) {
-                                Text(
-                                    text = "Displaying $currentAlbumsStart to $currentAlbumsEnd of $totalAlbums albums",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                    start = currentAlbumsStart,
+                                    end = currentAlbumsEnd,
+                                    total = totalAlbums,
+                                    label = "albums"
                                 )
                             }
                             LazyColumn(

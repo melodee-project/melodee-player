@@ -44,6 +44,7 @@ import android.content.Context
 import java.lang.SecurityException
 import com.melodee.autoplayer.util.rememberPermissionState
 import com.melodee.autoplayer.presentation.ui.components.FullImageViewer
+import com.melodee.autoplayer.util.hasNotificationListenerAccess
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,13 +62,15 @@ fun PlaylistScreen(
     val permissionState = rememberPermissionState(
         context = context,
         onPermissionGranted = {
-            try {
-                musicService = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
-                val controller = musicService?.getActiveSessions(null)?.firstOrNull()
-                mediaController = controller?.let { MediaController(context, it.sessionToken) }
-            } catch (e: SecurityException) {
-                musicService = null
-                mediaController = null
+            if (hasNotificationListenerAccess(context)) {
+                try {
+                    musicService = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                    val controller = musicService?.getActiveSessions(null)?.firstOrNull()
+                    mediaController = controller?.let { MediaController(context, it.sessionToken) }
+                } catch (_: SecurityException) {
+                    musicService = null
+                    mediaController = null
+                }
             }
         }
     )
@@ -178,10 +181,11 @@ fun PlaylistScreen(
                     
                     // Song position indicator (above the list)
                     if (songs.isNotEmpty() && totalSongs > 0) {
-                        Text(
-                            text = "Displaying $currentSongsStart to $currentSongsEnd of $totalSongs songs",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                            start = currentSongsStart,
+                            end = currentSongsEnd,
+                            total = totalSongs,
+                            label = "songs"
                         )
                     }
 
