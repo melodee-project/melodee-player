@@ -13,6 +13,9 @@ import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 object NetworkModule {
+    // Optional application context for features that need it (HTTP cache)
+    @Volatile
+    private var appContext: android.content.Context? = null
     private var baseUrl: String = ""
     private var authToken: String = ""
     private var retrofit: Retrofit? = null
@@ -28,6 +31,15 @@ object NetworkModule {
     
     // Thread-safe flag to prevent multiple 401 callbacks
     private val handlingAuthFailure = AtomicBoolean(false)
+
+    fun init(context: android.content.Context) {
+        // Keep application context only
+        appContext = context.applicationContext
+        // If we've already configured a base URL, recreate Retrofit to include cache, etc.
+        if (baseUrl.isNotEmpty()) {
+            createRetrofitInstance()
+        }
+    }
 
     fun setBaseUrl(url: String) {
         configLock.write {
@@ -88,11 +100,30 @@ object NetworkModule {
     }
 
     private fun createRetrofitInstance() {
-        val okHttpClient = OkHttpClient.Builder()
+        val ctx = appContext
+
+        // Configure dispatcher and connection pool for better control
+        val dispatcher = okhttp3.Dispatcher().apply {
+            // Allow more overall concurrency but limit per host to prevent overload
+            maxRequests = 32
+            maxRequestsPerHost = 8
+        }
+
+        val connectionPool = okhttp3.ConnectionPool(
+            10, // idle connections
+            5,  // keep-alive duration
+            java.util.concurrent.TimeUnit.MINUTES
+        )
+
+        val okHttpBuilder = OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .connectionPool(connectionPool)
             .addInterceptor { chain ->
                 val original = chain.request()
                 val request = original.newBuilder()
                     .header("Authorization", "Bearer $authToken")
+                    // Pass through request priority if set by callers via header
+                    // e.g., request.header("X-Request-Priority")
                     .method(original.method, original.body)
                     .build()
                 
@@ -108,13 +139,38 @@ object NetworkModule {
                 
                 response
             }
+            // Retry with simple exponential backoff for idempotent requests and 429/5xx
+            .addInterceptor(RetryInterceptor(maxRetries = 3))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             })
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
+            // Conservative, but responsive timeouts
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+
+        // Enable on-disk HTTP cache if we have a context
+        if (ctx != null) {
+            val cacheDir = java.io.File(ctx.cacheDir, "http_cache")
+            val cacheSizeBytes = 10L * 1024L * 1024L // 10 MB
+            okHttpBuilder.cache(okhttp3.Cache(cacheDir, cacheSizeBytes))
+
+            // Add a network interceptor to honor cache headers and provide sane defaults for GET
+            okHttpBuilder.addNetworkInterceptor { chain ->
+                val request = chain.request()
+                val response = chain.proceed(request)
+                // If server did not specify caching and request is GET, set a short-lived cache
+                if (request.method.equals("GET", ignoreCase = true) &&
+                    response.header("Cache-Control").isNullOrBlank()) {
+                    return@addNetworkInterceptor response.newBuilder()
+                        .header("Cache-Control", "public, max-age=60") // 1 minute default
+                        .build()
+                }
+                response
+            }
+        }
+
+        val okHttpClient = okHttpBuilder.build()
 
         retrofit = Retrofit.Builder()
             .baseUrl(baseUrl)

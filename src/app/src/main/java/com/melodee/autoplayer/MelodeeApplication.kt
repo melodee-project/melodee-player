@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
 import com.melodee.autoplayer.data.AuthenticationManager
+import com.melodee.autoplayer.data.api.NetworkModule
 import java.util.concurrent.TimeUnit
 
 class MelodeeApplication : Application(), ImageLoaderFactory {
@@ -26,6 +27,13 @@ class MelodeeApplication : Application(), ImageLoaderFactory {
         // Initialize authentication manager early
         Log.i("MelodeeApplication", "Initializing AuthenticationManager...")
         authenticationManager = AuthenticationManager(this)
+
+        // Initialize NetworkModule to enable HTTP cache and auth failure handling
+        NetworkModule.init(this)
+        NetworkModule.setAuthenticationFailureCallback {
+            Log.w("MelodeeApplication", "Authentication failure detected by NetworkModule")
+            // Potential hook: route to login screen via a global event bus
+        }
         
         Log.i("MelodeeApplication", "Authentication manager initialized")
         Log.i("MelodeeApplication", "=== APPLICATION STARTUP COMPLETE ===")
