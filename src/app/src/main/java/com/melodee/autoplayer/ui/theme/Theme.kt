@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -132,6 +133,11 @@ private val MusicGreenDarkColorScheme = darkColorScheme(
 enum class ThemePalette {
     DEFAULT,
     MUSIC_GREEN,
+    PRIMARY_COLORS,
+    RETRO_80S,
+    WINAMP,
+    BUBBLEGUM,
+    JUST_GREY,
     DYNAMIC // Uses system dynamic colors on Android 12+
 }
 
@@ -148,6 +154,21 @@ fun MelodeeTheme(
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        palette == ThemePalette.PRIMARY_COLORS -> {
+            if (darkTheme) PrimaryColorsDarkColorScheme else PrimaryColorsLightColorScheme
+        }
+        palette == ThemePalette.RETRO_80S -> {
+            if (darkTheme) Retro80sDarkColorScheme else Retro80sLightColorScheme
+        }
+        palette == ThemePalette.WINAMP -> {
+            if (darkTheme) WinAmpDarkColorScheme else WinAmpLightColorScheme
+        }
+        palette == ThemePalette.BUBBLEGUM -> {
+            if (darkTheme) BubblegumDarkColorScheme else BubblegumLightColorScheme
+        }
+        palette == ThemePalette.JUST_GREY -> {
+            if (darkTheme) JustGreyDarkColorScheme else JustGreyLightColorScheme
         }
         palette == ThemePalette.MUSIC_GREEN -> {
             if (darkTheme) MusicGreenDarkColorScheme else MusicGreenLightColorScheme
@@ -171,6 +192,177 @@ fun MelodeeTheme(
         content = content
     )
 }
+
+// Primary Colors Theme (RGB-inspired)
+private val PrimaryColorsLightColorScheme = lightColorScheme(
+    primary = AlternativePalettes.PrimaryColors.Primary50,
+    onPrimary = AlternativePalettes.PrimaryColors.Primary99,
+    primaryContainer = AlternativePalettes.PrimaryColors.Primary90,
+    onPrimaryContainer = AlternativePalettes.PrimaryColors.Primary10,
+    secondary = AlternativePalettes.PrimaryColors.Secondary50,
+    onSecondary = AlternativePalettes.PrimaryColors.Secondary99,
+    secondaryContainer = AlternativePalettes.PrimaryColors.Secondary90,
+    onSecondaryContainer = AlternativePalettes.PrimaryColors.Secondary10,
+    tertiary = AlternativePalettes.PrimaryColors.Tertiary50,
+    onTertiary = AlternativePalettes.PrimaryColors.Tertiary99,
+    tertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary90,
+    onTertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary10
+)
+
+private val PrimaryColorsDarkColorScheme = darkColorScheme(
+    primary = AlternativePalettes.PrimaryColors.Primary80,
+    onPrimary = AlternativePalettes.PrimaryColors.Primary20,
+    primaryContainer = AlternativePalettes.PrimaryColors.Primary30,
+    onPrimaryContainer = AlternativePalettes.PrimaryColors.Primary90,
+    secondary = AlternativePalettes.PrimaryColors.Secondary80,
+    onSecondary = AlternativePalettes.PrimaryColors.Secondary20,
+    secondaryContainer = AlternativePalettes.PrimaryColors.Secondary30,
+    onSecondaryContainer = AlternativePalettes.PrimaryColors.Secondary90,
+    tertiary = AlternativePalettes.PrimaryColors.Tertiary80,
+    onTertiary = AlternativePalettes.PrimaryColors.Tertiary20,
+    tertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary30,
+    onTertiaryContainer = AlternativePalettes.PrimaryColors.Tertiary90,
+)
+
+// 80s Retro Theme
+private val Retro80sLightColorScheme = lightColorScheme(
+    primary = AlternativePalettes.Retro80s.Primary60,
+    onPrimary = MelodeeColors.Neutral10,
+    primaryContainer = AlternativePalettes.Retro80s.Primary90,
+    onPrimaryContainer = AlternativePalettes.Retro80s.Primary20,
+    secondary = AlternativePalettes.Retro80s.Secondary60,
+    onSecondary = MelodeeColors.Neutral10,
+    secondaryContainer = AlternativePalettes.Retro80s.Secondary90,
+    onSecondaryContainer = AlternativePalettes.Retro80s.Secondary20,
+    tertiary = AlternativePalettes.Retro80s.Tertiary60,
+    onTertiary = MelodeeColors.Neutral10,
+    tertiaryContainer = AlternativePalettes.Retro80s.Tertiary90,
+    onTertiaryContainer = AlternativePalettes.Retro80s.Tertiary20,
+)
+
+private val Retro80sDarkColorScheme = darkColorScheme(
+    primary = AlternativePalettes.Retro80s.Primary80,
+    onPrimary = AlternativePalettes.Retro80s.Primary20,
+    primaryContainer = AlternativePalettes.Retro80s.Primary30,
+    onPrimaryContainer = AlternativePalettes.Retro80s.Primary90,
+    secondary = AlternativePalettes.Retro80s.Secondary80,
+    onSecondary = AlternativePalettes.Retro80s.Secondary20,
+    secondaryContainer = AlternativePalettes.Retro80s.Secondary30,
+    onSecondaryContainer = AlternativePalettes.Retro80s.Secondary90,
+    tertiary = AlternativePalettes.Retro80s.Tertiary80,
+    onTertiary = AlternativePalettes.Retro80s.Tertiary20,
+    tertiaryContainer = AlternativePalettes.Retro80s.Tertiary30,
+    onTertiaryContainer = AlternativePalettes.Retro80s.Tertiary90,
+    background = AlternativePalettes.Retro80s.GridBlack,
+    surface = AlternativePalettes.Retro80s.GridBlack,
+    onSurface = MelodeeColors.Neutral95,
+    surfaceVariant = AlternativePalettes.Retro80s.GridGray,
+    onSurfaceVariant = MelodeeColors.Neutral80,
+)
+
+// WinAmp Classic Theme
+private val WinAmpLightColorScheme = lightColorScheme(
+    primary = AlternativePalettes.WinAmpClassic.Gold,
+    onPrimary = MelodeeColors.Neutral10,
+    primaryContainer = Color(0xFFFFE680),
+    onPrimaryContainer = AlternativePalettes.WinAmpClassic.GoldDark,
+    secondary = AlternativePalettes.WinAmpClassic.Blue,
+    onSecondary = MelodeeColors.Neutral99,
+    secondaryContainer = Color(0xFFB3E0FF),
+    onSecondaryContainer = AlternativePalettes.WinAmpClassic.BlueDark,
+    tertiary = AlternativePalettes.WinAmpClassic.EQGreen,
+    onTertiary = MelodeeColors.Neutral10,
+    tertiaryContainer = Color(0xFFD6FFD6),
+    onTertiaryContainer = Color(0xFF005500)
+)
+
+private val WinAmpDarkColorScheme = darkColorScheme(
+    primary = AlternativePalettes.WinAmpClassic.Gold,
+    onPrimary = AlternativePalettes.WinAmpClassic.Charcoal,
+    primaryContainer = AlternativePalettes.WinAmpClassic.GoldDark,
+    onPrimaryContainer = MelodeeColors.Neutral95,
+    secondary = AlternativePalettes.WinAmpClassic.Blue,
+    onSecondary = MelodeeColors.Neutral99,
+    secondaryContainer = AlternativePalettes.WinAmpClassic.BlueDark,
+    onSecondaryContainer = MelodeeColors.Neutral95,
+    tertiary = AlternativePalettes.WinAmpClassic.EQGreen,
+    onTertiary = AlternativePalettes.WinAmpClassic.Charcoal,
+    tertiaryContainer = Color(0xFF2A7F2A),
+    onTertiaryContainer = MelodeeColors.Neutral95,
+    background = AlternativePalettes.WinAmpClassic.Charcoal,
+    surface = AlternativePalettes.WinAmpClassic.Slate,
+    onSurface = AlternativePalettes.WinAmpClassic.TextOnDark,
+)
+
+// Bubblegum Theme
+private val BubblegumLightColorScheme = lightColorScheme(
+    primary = AlternativePalettes.Bubblegum.Pink60,
+    onPrimary = MelodeeColors.Neutral10,
+    primaryContainer = AlternativePalettes.Bubblegum.Pink90,
+    onPrimaryContainer = AlternativePalettes.Bubblegum.Pink20,
+    secondary = AlternativePalettes.Bubblegum.CandyBlue50,
+    onSecondary = MelodeeColors.Neutral10,
+    secondaryContainer = AlternativePalettes.Bubblegum.CandyBlue90,
+    onSecondaryContainer = AlternativePalettes.Bubblegum.Pink20,
+    tertiary = AlternativePalettes.Bubblegum.Lavender50,
+    onTertiary = MelodeeColors.Neutral10,
+    tertiaryContainer = AlternativePalettes.Bubblegum.Lavender80,
+    onTertiaryContainer = AlternativePalettes.Bubblegum.Pink20,
+)
+
+private val BubblegumDarkColorScheme = darkColorScheme(
+    primary = AlternativePalettes.Bubblegum.Pink80,
+    onPrimary = AlternativePalettes.Bubblegum.Pink20,
+    primaryContainer = AlternativePalettes.Bubblegum.Pink30,
+    onPrimaryContainer = AlternativePalettes.Bubblegum.Pink90,
+    secondary = AlternativePalettes.Bubblegum.CandyBlue80,
+    onSecondary = AlternativePalettes.Bubblegum.Pink20,
+    secondaryContainer = AlternativePalettes.Bubblegum.CandyBlue50,
+    onSecondaryContainer = MelodeeColors.Neutral10,
+    tertiary = AlternativePalettes.Bubblegum.Lavender80,
+    onTertiary = AlternativePalettes.Bubblegum.Pink20,
+    tertiaryContainer = AlternativePalettes.Bubblegum.Lavender50,
+    onTertiaryContainer = MelodeeColors.Neutral10,
+    background = MelodeeColors.Neutral10,
+    surface = MelodeeColors.Neutral10,
+)
+
+// Just Grey Theme
+private val JustGreyLightColorScheme = lightColorScheme(
+    primary = AlternativePalettes.JustGrey.Grey50,
+    onPrimary = MelodeeColors.Neutral99,
+    primaryContainer = AlternativePalettes.JustGrey.Grey90,
+    onPrimaryContainer = AlternativePalettes.JustGrey.Grey10,
+    secondary = AlternativePalettes.JustGrey.Grey60,
+    onSecondary = MelodeeColors.Neutral99,
+    secondaryContainer = AlternativePalettes.JustGrey.Grey95,
+    onSecondaryContainer = AlternativePalettes.JustGrey.Grey20,
+    tertiary = AlternativePalettes.JustGrey.Grey40,
+    onTertiary = MelodeeColors.Neutral99,
+    tertiaryContainer = AlternativePalettes.JustGrey.Grey80,
+    onTertiaryContainer = AlternativePalettes.JustGrey.Grey10,
+    background = AlternativePalettes.JustGrey.Grey99,
+    surface = AlternativePalettes.JustGrey.Grey99,
+    onSurface = AlternativePalettes.JustGrey.Grey10,
+)
+
+private val JustGreyDarkColorScheme = darkColorScheme(
+    primary = AlternativePalettes.JustGrey.Grey80,
+    onPrimary = AlternativePalettes.JustGrey.Grey20,
+    primaryContainer = AlternativePalettes.JustGrey.Grey30,
+    onPrimaryContainer = AlternativePalettes.JustGrey.Grey90,
+    secondary = AlternativePalettes.JustGrey.Grey70,
+    onSecondary = AlternativePalettes.JustGrey.Grey20,
+    secondaryContainer = AlternativePalettes.JustGrey.Grey40,
+    onSecondaryContainer = AlternativePalettes.JustGrey.Grey90,
+    tertiary = AlternativePalettes.JustGrey.Grey60,
+    onTertiary = AlternativePalettes.JustGrey.Grey20,
+    tertiaryContainer = AlternativePalettes.JustGrey.Grey50,
+    onTertiaryContainer = AlternativePalettes.JustGrey.Grey95,
+    background = AlternativePalettes.JustGrey.Grey10,
+    surface = AlternativePalettes.JustGrey.Grey20,
+    onSurface = AlternativePalettes.JustGrey.Grey95,
+)
 
 // Extension function to get current theme palette
 @Composable

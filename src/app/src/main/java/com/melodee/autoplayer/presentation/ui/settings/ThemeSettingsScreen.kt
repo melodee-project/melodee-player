@@ -182,6 +182,30 @@ private fun getPaletteOptions(): List<PaletteOption> = listOf(
         tertiaryColor = MelodeeColors.Orange60
     ),
     PaletteOption(
+        palette = ThemePalette.PRIMARY_COLORS,
+        name = "Primary Colors",
+        description = "Bold RGB-inspired palette: blue, red, and green",
+        primaryColor = AlternativePalettes.PrimaryColors.Primary50,
+        secondaryColor = AlternativePalettes.PrimaryColors.Secondary50,
+        tertiaryColor = AlternativePalettes.PrimaryColors.Tertiary50
+    ),
+    PaletteOption(
+        palette = ThemePalette.RETRO_80S,
+        name = "Retro 80s",
+        description = "Neon magenta, electric cyan, and neon yellow",
+        primaryColor = AlternativePalettes.Retro80s.Primary60,
+        secondaryColor = AlternativePalettes.Retro80s.Secondary60,
+        tertiaryColor = AlternativePalettes.Retro80s.Tertiary60
+    ),
+    PaletteOption(
+        palette = ThemePalette.WINAMP,
+        name = "WinAmp Classic",
+        description = "Gold accents on a dark slate with electric blue",
+        primaryColor = AlternativePalettes.WinAmpClassic.Gold,
+        secondaryColor = AlternativePalettes.WinAmpClassic.Blue,
+        tertiaryColor = AlternativePalettes.WinAmpClassic.EQGreen
+    ),
+    PaletteOption(
         palette = ThemePalette.MUSIC_GREEN,
         name = "Music Green",
         description = "Fresh green palette inspired by music and nature",
@@ -196,6 +220,22 @@ private fun getPaletteOptions(): List<PaletteOption> = listOf(
         primaryColor = Color(0xFF6750A4),
         secondaryColor = Color(0xFF625B71),
         tertiaryColor = Color(0xFF7D5260)
+    ),
+    PaletteOption(
+        palette = ThemePalette.BUBBLEGUM,
+        name = "Bubblegum",
+        description = "A pink candy-coated nightmare — maximum bubblegum energy",
+        primaryColor = AlternativePalettes.Bubblegum.Pink60,
+        secondaryColor = AlternativePalettes.Bubblegum.CandyBlue50,
+        tertiaryColor = AlternativePalettes.Bubblegum.Lavender50
+    ),
+    PaletteOption(
+        palette = ThemePalette.JUST_GREY,
+        name = "Just Grey",
+        description = "Monochrome minimalism in layered greys",
+        primaryColor = AlternativePalettes.JustGrey.Grey50,
+        secondaryColor = AlternativePalettes.JustGrey.Grey70,
+        tertiaryColor = AlternativePalettes.JustGrey.Grey40
     )
 )
 

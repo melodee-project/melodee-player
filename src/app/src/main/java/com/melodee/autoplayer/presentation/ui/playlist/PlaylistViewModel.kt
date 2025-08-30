@@ -110,6 +110,22 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     private var currentPlaylistId: String? = null
     private var isRefreshing = false
 
+    companion object {
+        private const val MAX_SONGS_IN_MEMORY = 500
+        private const val KEEP_SONGS_ON_CLEANUP = 300
+    }
+
+    private fun applyVirtualScrolling(current: List<Song>, incoming: List<Song>, isFirstPage: Boolean): List<Song> {
+        return if (isFirstPage) {
+            incoming
+        } else {
+            val combined = current + incoming
+            if (combined.size > MAX_SONGS_IN_MEMORY) {
+                combined.takeLast(KEEP_SONGS_ON_CLEANUP) + incoming
+            } else combined
+        }
+    }
+
     init {
         // Start progress updates when playing
         viewModelScope.launch {
@@ -219,12 +235,12 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     val playlistName: String
         get() = _playlist.value?.name ?: ""
 
-    fun loadPlaylist(playlistId: String) {
+    fun loadPlaylist(playlistId: String, allowPagination: Boolean = false) {
         // Check if this is a different playlist than what's currently playing
         val isNewPlaylist = playlistId != currentPlaylistId
         
         // If it's the same playlist and we already have songs loaded, don't reload
-        if (playlistId == currentPlaylistId && _songs.value.isNotEmpty() && !isNewPlaylist) {
+        if (playlistId == currentPlaylistId && _songs.value.isNotEmpty() && !isNewPlaylist && !allowPagination) {
             Log.d("PlaylistViewModel", "Playlist $playlistId already loaded, skipping reload")
             return
         }
@@ -267,19 +283,21 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         // Handle error
                     }
                     ?.collect { response ->
-                        val allSongs = if (currentPage == 1) {
-                            response.data
-                        } else {
-                            _songs.value + response.data
-                        }
+                        val allSongs = applyVirtualScrolling(_songs.value, response.data, currentPage == 1)
                         _songs.value = allSongs
                         hasMoreSongs = response.meta.hasNext
                         currentPage = response.meta.currentPage + 1
                         
                         // Update pagination display values
                         _totalSongs.value = response.meta.totalCount
-                        _currentSongsStart.value = if (allSongs.isNotEmpty()) 1 else 0
-                        _currentSongsEnd.value = allSongs.size
+                        if (response.meta.currentPage == 1) {
+                            _currentSongsStart.value = if (response.data.isNotEmpty()) 1 else 0
+                            _currentSongsEnd.value = response.data.size
+                        } else {
+                            val prevEnd = _currentSongsEnd.value
+                            _currentSongsStart.value = prevEnd + 1
+                            _currentSongsEnd.value = prevEnd + response.data.size
+                        }
                         
                         // If this was a refresh and we have songs, trigger scroll to top
                         if (isRefreshing && response.data.isNotEmpty() && currentPage == 2) {
@@ -325,6 +343,8 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         hasMoreSongs = true
         _songs.value = emptyList()
         isRefreshing = true
+        _currentSongsStart.value = 0
+        _currentSongsEnd.value = 0
         currentPlaylistId?.let { loadPlaylist(it) }
     }
 
@@ -401,7 +421,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     fun loadMoreSongs() {
         if (!hasMoreSongs || _isLoading.value) return
         isRefreshing = false // Ensure we don't trigger scroll during pagination
-        currentPlaylistId?.let { loadPlaylist(it) }
+        currentPlaylistId?.let { loadPlaylist(it, allowPagination = true) }
     }
 
     fun playSong(song: Song) {

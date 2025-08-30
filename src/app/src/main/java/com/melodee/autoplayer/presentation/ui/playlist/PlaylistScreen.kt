@@ -179,7 +179,7 @@ fun PlaylistScreen(
                     // Song position indicator (above the list)
                     if (songs.isNotEmpty() && totalSongs > 0) {
                         Text(
-                            text = "Displaying $currentSongsStart to $currentSongsEnd of $totalSongs results",
+                            text = "Displaying $currentSongsStart to $currentSongsEnd of $totalSongs songs",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )

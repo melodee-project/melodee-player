@@ -47,6 +47,7 @@ class MusicService : MediaBrowserServiceCompat() {
     private lateinit var authenticationManager: AuthenticationManager
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionUpdateJob: Job? = null
+    private var prefetchJob: Job? = null
     
     // Audio focus management
     private lateinit var audioManager: AudioManager
@@ -835,6 +836,9 @@ class MusicService : MediaBrowserServiceCompat() {
         // Release playback manager (which handles player cleanup)
         playbackManager.release()
         player = null
+        
+        // Clear on-disk media cache on service shutdown
+        MediaCache.clearCache(applicationContext)
         super.onDestroy()
     }
 
@@ -1040,6 +1044,9 @@ class MusicService : MediaBrowserServiceCompat() {
                                     Log.d("MusicService", "Started scrobble tracking for: ${song.title}, duration: $duration")
                                 }
                             }
+
+                            // Prefetch upcoming songs to tolerate spotty networks
+                            prefetchUpcoming()
                         }
                         Player.STATE_BUFFERING -> {
                             Log.d("MusicService", "Player buffering")
@@ -1071,6 +1078,8 @@ class MusicService : MediaBrowserServiceCompat() {
                     // Start or stop position updates based on playback state
                     if (isPlaying) {
                         startPositionUpdates()
+                        // Prefetch again in case queue position changed
+                        prefetchUpcoming()
                     } else {
                         stopPositionUpdates()
                     }
@@ -1296,6 +1305,26 @@ class MusicService : MediaBrowserServiceCompat() {
             stopForeground(true)
         }
         Log.d("MusicService", "Stopped foreground service and removed notification")
+    }
+
+    private fun prefetchUpcoming(count: Int = 2) {
+        prefetchJob?.cancel()
+        prefetchJob = serviceScope.launch(Dispatchers.IO) {
+            try {
+                val queue = queueManager().currentQueue.value
+                val index = queueManager().currentIndex.value
+                if (queue.isEmpty() || index < 0) return@launch
+                for (i in 1..count) {
+                    val nextIdx = index + i
+                    if (nextIdx in queue.indices) {
+                        val url = queue[nextIdx].streamUrl
+                        MediaCache.prefetchUrl(this@MusicService, url)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("MusicService", "Prefetch job error: ${e.message}")
+            }
+        }
     }
 
     private fun skipToNext() {

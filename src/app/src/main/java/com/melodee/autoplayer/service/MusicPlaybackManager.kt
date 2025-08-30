@@ -69,7 +69,10 @@ class MusicPlaybackManager(private val context: Context) {
     
     fun initializePlayer(): ExoPlayer {
         if (exoPlayer == null) {
-            exoPlayer = ExoPlayer.Builder(context).build().also { player ->
+            val mediaSourceFactory = MediaCache.mediaSourceFactory(context)
+            exoPlayer = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build().also { player ->
                 player.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _isPlaying.value = isPlaying
