@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.parcelize")
+    id("jacoco")
 }
 
 android {
@@ -22,6 +23,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            enableAndroidTestCoverage = true
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -103,10 +108,44 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.10")
     testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation("com.google.truth:truth:1.1.3")
+    testImplementation("app.cash.turbine:turbine:1.0.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.robolectric:robolectric:4.11.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// JaCoCo coverage configuration
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest", "createDebugCoverageReport")
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    val fileFilter = listOf(
+        "**/R.class",
+        "**/R\$*.class",
+        "**/BuildConfig.*",
+        "**/Manifest*.*",
+        "**/*Test*.*",
+        "android/**/*.*"
+    )
+
+    val debugTree = fileTree("${buildDir}/intermediates/classes/debug") {
+        exclude(fileFilter)
+    }
+    val mainSrc = "${project.projectDir}/src/main/java"
+
+    sourceDirectories.setFrom(files(mainSrc))
+    classDirectories.setFrom(files(debugTree))
+    executionData.setFrom(fileTree(buildDir) {
+        include("**/*.exec", "**/*.ec")
+    })
 } 

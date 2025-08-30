@@ -15,4 +15,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "MelodeeAndroidAuto"
-include(":app") 
+include(":app")
+include(":benchmark") 
