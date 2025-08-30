@@ -910,6 +910,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _showAlbums.value = true
     }
 
+    fun playAlbum(album: Album) {
+        viewModelScope.launch {
+            try {
+                repository?.getAlbumSongs(album.id.toString(), 1)
+                    ?.collect { response ->
+                        val albumSongs = response.data
+                        if (albumSongs.isNotEmpty()) {
+                            _currentSongIndex.value = 0
+                            _isPlaying.value = true
+                            _currentPlayingSong.value = albumSongs.first()
+                            
+                            context?.let { ctx ->
+                                Log.d("HomeViewModel", "Playing album: ${album.name} with ${albumSongs.size} songs")
+                                val intent = Intent(ctx, MusicService::class.java).apply {
+                                    action = MusicService.ACTION_SET_SEARCH_RESULTS
+                                    putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(albumSongs))
+                                    putExtra("START_INDEX", 0)
+                                }
+                                ctx.startService(intent)
+                            }
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error playing album", e)
+            }
+        }
+    }
+
     fun browseArtistSongs() {
         val artist = _selectedArtist.value ?: return
         
@@ -918,6 +946,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _searchQuery.value = ""
         currentSearchPage = 1
         hasMoreSongs = true
+        
+        // Hide albums view to show songs
+        _showAlbums.value = false
+        _showAlbumSongs.value = false
         
         // Load all songs for this artist
         viewModelScope.launch {

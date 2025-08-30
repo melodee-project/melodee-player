@@ -176,8 +176,9 @@ private fun MobileNowPlayingLayout(
                     song = currentSong,
                     isPlaying = isPlaying,
                     modifier = Modifier
-                        .size(320.dp)
-                        .weight(1f, false)
+                        .fillMaxWidth()
+                        .weight(1f, true)
+                        .aspectRatio(1f)
                 )
                 
                 Spacer(modifier = Modifier.height(32.dp))

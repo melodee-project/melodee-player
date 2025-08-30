@@ -231,6 +231,19 @@ class NowPlayingViewModel : ViewModel() {
     
     fun clearQueue() {
         Log.d("NowPlayingViewModel", "Clear queue")
+        
+        // Reset playing song state (no song playing)
+        _currentSong.value = null
+        _isPlaying.value = false
+        _playbackProgress.value = 0f
+        _currentDuration.value = 0L
+        _currentPosition.value = 0L
+        _currentIndex.value = -1
+        
+        // Stop progress updates
+        stopProgressUpdates()
+        
+        // Clear queue in service
         musicService?.getQueueManager()?.clearQueue()
     }
     

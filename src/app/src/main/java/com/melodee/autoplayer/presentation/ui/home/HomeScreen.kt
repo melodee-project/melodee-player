@@ -437,6 +437,13 @@ fun HomeScreen(
                                                     album = album,
                                                     onClick = { 
                                                         viewModel.browseAlbumSongs(album)
+                                                    },
+                                                    onPlayClick = {
+                                                        if (permissionState.hasMediaPermission) {
+                                                            viewModel.playAlbum(album)
+                                                        } else {
+                                                            permissionState.requestPermission()
+                                                        }
                                                     }
                                                 )
                                             }
