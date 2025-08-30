@@ -31,12 +31,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.melodee.autoplayer.MelodeeApplication
 import com.melodee.autoplayer.domain.model.AuthResponse
+import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.presentation.ui.about.AboutScreen
 import com.melodee.autoplayer.presentation.ui.home.HomeScreen
 import com.melodee.autoplayer.presentation.ui.home.HomeViewModel
@@ -61,6 +67,7 @@ class MainActivity : ComponentActivity() {
     private var musicService: MusicService? = null
     private var bound = false
     private var mediaBrowser: MediaBrowserCompat? = null
+    
     
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -419,8 +426,8 @@ fun MainScreen(
             )
         },
         bottomBar = {
-            // Global Mini Player
-            if (globalCurrentSong != null && showIcons) {
+            // Global Mini Player (hide when on now playing screen)
+            if (globalCurrentSong != null && showIcons && currentRoute != "now_playing") {
                 com.melodee.autoplayer.presentation.ui.components.MiniPlayer(
                     currentSong = globalCurrentSong,
                     isPlaying = globalIsPlaying,
@@ -513,7 +520,8 @@ fun MainScreen(
                     onPlaylistClick = { playlistId ->
                         Log.d("MainActivity", "Navigating to playlist: $playlistId")
                         navController.navigate("playlist/$playlistId")
-                    }
+                    },
+                    globalCurrentSong = globalCurrentSong
                 )
             }
             composable("playlist/{playlistId}") { backStackEntry ->
@@ -526,7 +534,8 @@ fun MainScreen(
                     viewModel = playlistViewModel,
                     onBackClick = {
                         navController.popBackStack()
-                    }
+                    },
+                    globalCurrentSong = globalCurrentSong
                 )
             }
             composable("theme_settings") {
@@ -540,9 +549,79 @@ fun MainScreen(
                 )
             }
             composable("now_playing") {
+                val globalDuration = globalCurrentSong?.durationMs?.toLong() ?: 0L
+                val globalCurrentPosition = (globalProgress * globalDuration).toLong()
+                
                 NowPlayingScreen(
                     viewModel = nowPlayingViewModel,
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
+                    globalCurrentSong = globalCurrentSong,
+                    globalIsPlaying = globalIsPlaying,
+                    globalProgress = globalProgress,
+                    globalCurrentPosition = globalCurrentPosition,
+                    globalCurrentDuration = globalDuration,
+                    onGlobalPlayPauseClick = {
+                        // Use the same logic as the mini player
+                        when {
+                            playlistCurrentSong != null && playlistIsPlaying -> playlistViewModel.togglePlayPause()
+                            homeIsPlaying -> homeViewModel.togglePlayPause()
+                            playlistCurrentSong != null -> playlistViewModel.togglePlayPause()
+                            else -> homeViewModel.togglePlayPause()
+                        }
+                    },
+                    onGlobalPreviousClick = {
+                        // Use the same logic as the mini player
+                        when {
+                            playlistCurrentSong != null && playlistIsPlaying -> playlistViewModel.skipToPrevious()
+                            homeIsPlaying -> {
+                                val currentIndex = homeViewModel.currentSongIndex.value
+                                if (currentIndex > 0) {
+                                    homeViewModel.playSong(homeViewModel.songs.value[currentIndex - 1])
+                                }
+                            }
+                            playlistCurrentSong != null -> playlistViewModel.skipToPrevious()
+                            else -> {
+                                val currentIndex = homeViewModel.currentSongIndex.value
+                                if (currentIndex > 0) {
+                                    homeViewModel.playSong(homeViewModel.songs.value[currentIndex - 1])
+                                }
+                            }
+                        }
+                    },
+                    onGlobalNextClick = {
+                        // Use the same logic as the mini player
+                        when {
+                            playlistCurrentSong != null && playlistIsPlaying -> playlistViewModel.skipToNext()
+                            homeIsPlaying -> {
+                                val currentIndex = homeViewModel.currentSongIndex.value
+                                val songs = homeViewModel.songs.value
+                                if (currentIndex >= 0 && currentIndex < songs.size - 1) {
+                                    homeViewModel.playSong(songs[currentIndex + 1])
+                                }
+                            }
+                            playlistCurrentSong != null -> playlistViewModel.skipToNext()
+                            else -> {
+                                val currentIndex = homeViewModel.currentSongIndex.value
+                                val songs = homeViewModel.songs.value
+                                if (currentIndex >= 0 && currentIndex < songs.size - 1) {
+                                    homeViewModel.playSong(songs[currentIndex + 1])
+                                }
+                            }
+                        }
+                    },
+                    onGlobalSeekTo = { progress ->
+                        // Delegate seeking to the appropriate ViewModel
+                        when {
+                            homeIsPlaying -> {
+                                val position = (progress * globalDuration).toLong() 
+                                homeViewModel.seekTo(position)
+                            }
+                            else -> {
+                                val position = (progress * globalDuration).toLong()
+                                homeViewModel.seekTo(position)
+                            }
+                        }
+                    }
                 )
             }
         }

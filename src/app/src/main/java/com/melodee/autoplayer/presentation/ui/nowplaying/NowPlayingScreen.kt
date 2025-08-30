@@ -37,15 +37,28 @@ import com.melodee.autoplayer.util.formatDuration
 @Composable
 fun NowPlayingScreen(
     viewModel: NowPlayingViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    // Global state parameters for sync with mini player
+    globalCurrentSong: Song? = null,
+    globalIsPlaying: Boolean = false,
+    globalProgress: Float = 0f,
+    globalCurrentPosition: Long = 0L,
+    globalCurrentDuration: Long = 0L,
+    onGlobalPlayPauseClick: () -> Unit = {},
+    onGlobalPreviousClick: () -> Unit = {},
+    onGlobalNextClick: () -> Unit = {},
+    onGlobalSeekTo: (Float) -> Unit = {}
 ) {
     val context = LocalContext.current
     
-    val currentSong by viewModel.currentSong.collectAsStateWithLifecycle()
-    val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
-    val playbackProgress by viewModel.playbackProgress.collectAsStateWithLifecycle()
-    val currentPosition by viewModel.currentPosition.collectAsStateWithLifecycle()
-    val currentDuration by viewModel.currentDuration.collectAsStateWithLifecycle()
+    // Use global state if provided, otherwise fall back to ViewModel state
+    val currentSong = globalCurrentSong ?: viewModel.currentSong.collectAsStateWithLifecycle().value
+    val isPlaying = if (globalCurrentSong != null) globalIsPlaying else viewModel.isPlaying.collectAsStateWithLifecycle().value
+    val playbackProgress = if (globalCurrentSong != null) globalProgress else viewModel.playbackProgress.collectAsStateWithLifecycle().value
+    val currentPosition = if (globalCurrentSong != null) globalCurrentPosition else viewModel.currentPosition.collectAsStateWithLifecycle().value
+    val currentDuration = if (globalCurrentSong != null) globalCurrentDuration else viewModel.currentDuration.collectAsStateWithLifecycle().value
+    
+    // These are still from ViewModel as they're not part of the sync issue
     val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val queue by viewModel.queue.collectAsStateWithLifecycle()
@@ -53,9 +66,11 @@ fun NowPlayingScreen(
     
     var showQueue by remember { mutableStateOf(false) }
     
-    // Set context in ViewModel
+    // Set context in ViewModel only if not using global state
     LaunchedEffect(Unit) {
-        viewModel.setContext(context)
+        if (globalCurrentSong == null) {
+            viewModel.setContext(context)
+        }
     }
     
     // Mobile layout
@@ -71,12 +86,12 @@ fun NowPlayingScreen(
         currentIndex = currentIndex,
         showQueue = showQueue,
         onBackClick = onBackClick,
-        onPlayPauseClick = { viewModel.togglePlayPause() },
-        onPreviousClick = { viewModel.skipToPrevious() },
-        onNextClick = { viewModel.skipToNext() },
+        onPlayPauseClick = if (globalCurrentSong != null) onGlobalPlayPauseClick else ({ viewModel.togglePlayPause() }),
+        onPreviousClick = if (globalCurrentSong != null) onGlobalPreviousClick else ({ viewModel.skipToPrevious() }),
+        onNextClick = if (globalCurrentSong != null) onGlobalNextClick else ({ viewModel.skipToNext() }),
         onShuffleClick = { viewModel.toggleShuffle() },
         onRepeatClick = { viewModel.toggleRepeat() },
-        onSeekTo = { progress -> viewModel.seekTo((progress * currentDuration).toLong()) },
+        onSeekTo = if (globalCurrentSong != null) onGlobalSeekTo else { progress -> viewModel.seekTo((progress * currentDuration).toLong()) },
         onQueueToggle = { showQueue = !showQueue },
         onQueueItemClick = { song -> viewModel.playSong(song) },
         onQueueItemRemove = { index -> viewModel.removeFromQueue(index) },

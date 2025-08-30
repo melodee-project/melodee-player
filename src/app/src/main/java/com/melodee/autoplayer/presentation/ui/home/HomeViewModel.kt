@@ -86,6 +86,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isAlbumsLoading = MutableStateFlow(false)
     val isAlbumsLoading: StateFlow<Boolean> = _isAlbumsLoading.asStateFlow()
+    
+    private val _totalAlbums = MutableStateFlow(0)
+    val totalAlbums: StateFlow<Int> = _totalAlbums.asStateFlow()
+    
+    private val _currentAlbumsStart = MutableStateFlow(0)
+    val currentAlbumsStart: StateFlow<Int> = _currentAlbumsStart.asStateFlow()
+    
+    private val _currentAlbumsEnd = MutableStateFlow(0)
+    val currentAlbumsEnd: StateFlow<Int> = _currentAlbumsEnd.asStateFlow()
 
     private val _showAlbums = MutableStateFlow(false)
     val showAlbums: StateFlow<Boolean> = _showAlbums.asStateFlow()
@@ -842,7 +851,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _isAlbumsLoading.value = false
                     }
                     ?.collect { response ->
-                        _albums.value = response.data
+                        // Sort albums by release year in descending order (newest first)
+                        val sortedAlbums = response.data.sortedByDescending { it.releaseYear }
+                        _albums.value = sortedAlbums
+                        _totalAlbums.value = response.meta.totalCount
+                        _currentAlbumsStart.value = if (sortedAlbums.isNotEmpty()) 1 else 0
+                        _currentAlbumsEnd.value = sortedAlbums.size
                         _isAlbumsLoading.value = false
                     }
             } catch (e: Exception) {

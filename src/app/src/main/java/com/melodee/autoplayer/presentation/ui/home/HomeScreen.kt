@@ -66,7 +66,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onPlaylistClick: (String) -> Unit
+    onPlaylistClick: (String) -> Unit,
+    globalCurrentSong: Song? = null
 ) {
     val context = LocalContext.current
     
@@ -145,6 +146,9 @@ fun HomeScreen(
     val showAlbums by viewModel.showAlbums.collectAsStateWithLifecycle()
     val selectedAlbum by viewModel.selectedAlbum.collectAsStateWithLifecycle()
     val showAlbumSongs by viewModel.showAlbumSongs.collectAsStateWithLifecycle()
+    val totalAlbums by viewModel.totalAlbums.collectAsStateWithLifecycle()
+    val currentAlbumsStart by viewModel.currentAlbumsStart.collectAsStateWithLifecycle()
+    val currentAlbumsEnd by viewModel.currentAlbumsEnd.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
@@ -332,6 +336,24 @@ fun HomeScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
                             }
+                            
+                            // Album songs position indicator (above the list)
+                            if (showAlbumSongs && songs.isNotEmpty() && totalSearchResults > 0) {
+                                Text(
+                                    text = "Displaying $currentPageStart to $currentPageEnd of $totalSearchResults songs",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            
+                            // Album position indicator (above the list)
+                            if (showAlbums && albums.isNotEmpty() && totalAlbums > 0) {
+                                Text(
+                                    text = "Displaying $currentAlbumsStart to $currentAlbumsEnd of $totalAlbums albums",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize()
@@ -369,7 +391,7 @@ fun HomeScreen(
                                                         permissionState.requestPermission()
                                                     }
                                                 },
-                                                isCurrentlyPlaying = song == currentSong,
+                                                isCurrentlyPlaying = song.id == (globalCurrentSong?.id ?: currentSong?.id),
                                                 onFavoriteClick = { songToFavorite, newStarredValue ->
                                                     viewModel.favoriteSong(songToFavorite, newStarredValue)
                                                 }
@@ -432,7 +454,7 @@ fun HomeScreen(
                                                         permissionState.requestPermission()
                                                     }
                                                 },
-                                                isCurrentlyPlaying = song == currentSong,
+                                                isCurrentlyPlaying = song.id == (globalCurrentSong?.id ?: currentSong?.id),
                                                 onFavoriteClick = { songToFavorite, newStarredValue ->
                                                     viewModel.favoriteSong(songToFavorite, newStarredValue)
                                                 }

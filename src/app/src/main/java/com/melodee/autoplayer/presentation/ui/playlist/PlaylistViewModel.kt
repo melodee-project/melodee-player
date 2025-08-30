@@ -93,6 +93,15 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
 
     private val _shouldScrollToTop = MutableStateFlow(false)
     val shouldScrollToTop: StateFlow<Boolean> = _shouldScrollToTop.asStateFlow()
+    
+    private val _totalSongs = MutableStateFlow(0)
+    val totalSongs: StateFlow<Int> = _totalSongs.asStateFlow()
+    
+    private val _currentSongsStart = MutableStateFlow(0)
+    val currentSongsStart: StateFlow<Int> = _currentSongsStart.asStateFlow()
+    
+    private val _currentSongsEnd = MutableStateFlow(0)
+    val currentSongsEnd: StateFlow<Int> = _currentSongsEnd.asStateFlow()
 
     private var progressUpdateJob: Job? = null
 
@@ -214,29 +223,16 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         // Check if this is a different playlist than what's currently playing
         val isNewPlaylist = playlistId != currentPlaylistId
         
-        // If it's the same playlist and we have no more songs to load, 
-        // still trigger auto-play but don't reload the songs
+        // If it's the same playlist and we already have songs loaded, don't reload
+        if (playlistId == currentPlaylistId && _songs.value.isNotEmpty() && !isNewPlaylist) {
+            Log.d("PlaylistViewModel", "Playlist $playlistId already loaded, skipping reload")
+            return
+        }
+        
+        // Don't auto-play when returning to an already loaded playlist
+        // This prevents restarting music when user navigates back from full-screen player
         if (playlistId == currentPlaylistId && !hasMoreSongs && _songs.value.isNotEmpty()) {
-            // Stop current playback if any
-            context?.let { ctx ->
-                val stopIntent = Intent(ctx, MusicService::class.java).apply {
-                    action = MusicService.ACTION_STOP
-                }
-                ctx.startService(stopIntent)
-            }
-            
-            // Start playing the first song with playlist context
-            val firstSong = _songs.value.first()
-            _currentSong.value = firstSong
-            _isPlaying.value = true
-            context?.let { ctx ->
-                val playIntent = Intent(ctx, MusicService::class.java).apply {
-                    action = MusicService.ACTION_SET_PLAYLIST
-                    putParcelableArrayListExtra(MusicService.EXTRA_PLAYLIST, ArrayList(_songs.value))
-                    putExtra("START_INDEX", 0)
-                }
-                ctx.startService(playIntent)
-            }
+            Log.d("PlaylistViewModel", "Same playlist already loaded with no more songs, skipping auto-play")
             return
         }
         
@@ -271,13 +267,19 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         // Handle error
                     }
                     ?.collect { response ->
-                        _songs.value = if (currentPage == 1) {
+                        val allSongs = if (currentPage == 1) {
                             response.data
                         } else {
                             _songs.value + response.data
                         }
+                        _songs.value = allSongs
                         hasMoreSongs = response.meta.hasNext
                         currentPage = response.meta.currentPage + 1
+                        
+                        // Update pagination display values
+                        _totalSongs.value = response.meta.totalCount
+                        _currentSongsStart.value = if (allSongs.isNotEmpty()) 1 else 0
+                        _currentSongsEnd.value = allSongs.size
                         
                         // If this was a refresh and we have songs, trigger scroll to top
                         if (isRefreshing && response.data.isNotEmpty() && currentPage == 2) {
@@ -285,8 +287,9 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                             isRefreshing = false
                         }
                         
-                        // Always auto-play the first song when loading a playlist
-                        if (response.data.isNotEmpty()) {
+                        // Only auto-play the first song when loading a NEW playlist
+                        if (response.data.isNotEmpty() && isNewPlaylist) {
+                            Log.d("PlaylistViewModel", "Auto-playing first song of new playlist: $playlistId")
                             // Stop current playback if any
                             context?.let { ctx ->
                                 val stopIntent = Intent(ctx, MusicService::class.java).apply {
@@ -307,6 +310,8 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                                 }
                                 ctx.startService(playIntent)
                             }
+                        } else if (!isNewPlaylist) {
+                            Log.d("PlaylistViewModel", "Returning to existing playlist $playlistId, preserving current playback")
                         }
                     }
             } finally {

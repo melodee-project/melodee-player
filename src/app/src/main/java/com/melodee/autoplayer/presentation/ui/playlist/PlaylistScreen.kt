@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
-import com.melodee.autoplayer.presentation.ui.components.SongItem
+import com.melodee.autoplayer.presentation.ui.components.PlaylistSongItem
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,7 +50,8 @@ import com.melodee.autoplayer.presentation.ui.components.FullImageViewer
 @Composable
 fun PlaylistScreen(
     viewModel: PlaylistViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    globalCurrentSong: Song? = null
 ) {
     val context = LocalContext.current
     
@@ -76,6 +77,9 @@ fun PlaylistScreen(
     val currentSong by viewModel.currentSong.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val shouldScrollToTop by viewModel.shouldScrollToTop.collectAsStateWithLifecycle()
+    val totalSongs by viewModel.totalSongs.collectAsStateWithLifecycle()
+    val currentSongsStart by viewModel.currentSongsStart.collectAsStateWithLifecycle()
+    val currentSongsEnd by viewModel.currentSongsEnd.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     
@@ -171,6 +175,15 @@ fun PlaylistScreen(
                             }
                         }
                     }
+                    
+                    // Song position indicator (above the list)
+                    if (songs.isNotEmpty() && totalSongs > 0) {
+                        Text(
+                            text = "Displaying $currentSongsStart to $currentSongsEnd of $totalSongs results",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
 
                     // Songs list
                     LazyColumn(
@@ -180,9 +193,9 @@ fun PlaylistScreen(
                             .fillMaxWidth()
                     ) {
                         items(songs, key = { it.id }) { song ->
-                            SongItem(
+                            PlaylistSongItem(
                                 song = song,
-                                isCurrentlyPlaying = song.id == currentSong?.id,
+                                isCurrentlyPlaying = song.id == (globalCurrentSong?.id ?: currentSong?.id),
                                 onClick = { 
                                     if (permissionState.hasMediaPermission) {
                                         viewModel.playSong(song)
