@@ -32,6 +32,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var bound = false
     private var searchJob: Job? = null
     private var performanceMonitor: PerformanceMonitor? = null
+    private var didAttemptUserRefresh = false
     
     companion object {
         private const val MAX_SONGS_IN_MEMORY = 500
@@ -399,6 +400,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _playlists.value = emptyList()
         
         // Note: Playlists will be loaded when setUser() is called after authentication
+    }
+
+    fun refreshUserFromApiIfNeeded() {
+        if (repository == null || didAttemptUserRefresh) return
+        didAttemptUserRefresh = true
+        viewModelScope.launch {
+            try {
+                repository?.getCurrentUser()
+                    ?.catch { e -> Log.w("HomeViewModel", "Failed to fetch current user: ${e.message}") }
+                    ?.collect { user ->
+                        _user.value = user
+                        // Optionally trigger playlists reload or other dependent UI updates
+                    }
+            } catch (e: Exception) {
+                Log.w("HomeViewModel", "Exception fetching current user", e)
+            }
+        }
     }
 
     fun loadPlaylists() {

@@ -9,6 +9,10 @@ interface MusicApi {
         @Body credentials: Map<String, String>
     ): AuthResponse
 
+    // Fetch current authenticated user profile
+    @GET("users/me")
+    suspend fun getCurrentUser(): User
+
     @GET("users/playlists")
     suspend fun getPlaylists(
         @Query("page") page: Int,
@@ -70,4 +74,4 @@ interface MusicApi {
         @Path("songId") songId: String,
         @Path("userStarred") userStarred: Boolean
     ): retrofit2.Response<Unit>
-} 
+}

@@ -3,9 +3,11 @@ package com.melodee.autoplayer.presentation.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,7 +36,6 @@ fun SongItem(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var showFullImage by remember { mutableStateOf(false) }
     var isStarred by remember { mutableStateOf(song.userStarred) }
 
     // Update isStarred when song.userStarred changes
@@ -50,7 +51,6 @@ fun SongItem(
         modifier = modifier
             .fillMaxWidth()
             .height(itemHeight)
-            .clickable(onClick = onClick)
             .background(
                 if (isCurrentlyPlaying) {
                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
@@ -61,29 +61,49 @@ fun SongItem(
             .padding(horizontal = horizontalPadding, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Thumbnail
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(song.thumbnailUrl)
-                .crossfade(true)
-                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                .build(),
-            contentDescription = "Song thumbnail",
-            modifier = Modifier
-                .size(thumbnailSize)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { 
-                    song.imageUrl.let { 
-                        showFullImage = true 
-                    }
-                },
-            contentScale = ContentScale.Crop
-        )
+        // Thumbnail with play icon overlay
+        Box {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(song.thumbnailUrl)
+                    .crossfade(true)
+                    .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                    .build(),
+                contentDescription = "Song thumbnail",
+                modifier = Modifier
+                    .size(thumbnailSize)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
+            )
+
+            // Play icon overlay (tap to play)
+            Box(
+                modifier = Modifier
+                    .size(thumbnailSize)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onClick() }
+                    .background(Color.Black.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Play song",
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary,
+                            CircleShape
+                        )
+                        .padding(4.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Song details
+        // Song details (no click-to-play on title)
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -141,11 +161,4 @@ fun SongItem(
         }
     }
 
-    // Full image viewer
-    if (showFullImage) {
-        FullImageViewer(
-            imageUrl = song.imageUrl,
-            onDismiss = { showFullImage = false }
-        )
-    }
 }

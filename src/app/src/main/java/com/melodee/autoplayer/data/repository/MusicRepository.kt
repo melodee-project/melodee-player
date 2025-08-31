@@ -10,6 +10,7 @@ import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.Artist
 import com.melodee.autoplayer.domain.model.Album
+import com.melodee.autoplayer.domain.model.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import retrofit2.HttpException
@@ -43,6 +44,13 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
     fun getPlaylists(page: Int): Flow<PaginatedResponse<Playlist>> = flow {
         val response = ErrorHandler.handleOperation(context, "getPlaylists", "MusicRepository") {
             api.getPlaylists(page)
+        }
+        emit(response)
+    }
+
+    fun getCurrentUser(): Flow<User> = flow {
+        val response = ErrorHandler.handleOperation(context, "getCurrentUser", "MusicRepository") {
+            api.getCurrentUser()
         }
         emit(response)
     }

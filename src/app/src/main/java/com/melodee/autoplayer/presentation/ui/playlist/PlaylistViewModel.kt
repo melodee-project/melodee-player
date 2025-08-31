@@ -109,6 +109,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     private var hasMoreSongs = true
     private var currentPlaylistId: String? = null
     private var isRefreshing = false
+    private var autoPlayAfterRefresh = false
 
     companion object {
         private const val MAX_SONGS_IN_MEMORY = 500
@@ -305,8 +306,8 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                             isRefreshing = false
                         }
                         
-                        // Only auto-play the first song when loading a NEW playlist
-                        if (response.data.isNotEmpty() && isNewPlaylist) {
+                        // Auto-play the first song when loading a NEW playlist or after a manual refresh
+                        if (response.data.isNotEmpty() && (isNewPlaylist || autoPlayAfterRefresh)) {
                             Log.d("PlaylistViewModel", "Auto-playing first song of new playlist: $playlistId")
                             // Stop current playback if any
                             context?.let { ctx ->
@@ -325,9 +326,14 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                                     action = MusicService.ACTION_SET_PLAYLIST
                                     putParcelableArrayListExtra(MusicService.EXTRA_PLAYLIST, ArrayList(_songs.value))
                                     putExtra("START_INDEX", 0)
+                                    // Provide playlist pagination context so service can load more
+                                    putExtra("PLAYLIST_ID", playlistId)
+                                    putExtra("NEXT_PAGE", currentPage)
+                                    putExtra("HAS_MORE", hasMoreSongs)
                                 }
                                 ctx.startService(playIntent)
                             }
+                            autoPlayAfterRefresh = false
                         } else if (!isNewPlaylist) {
                             Log.d("PlaylistViewModel", "Returning to existing playlist $playlistId, preserving current playback")
                         }
@@ -339,10 +345,28 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun refreshSongs() {
+        // Stop playback and clear queue before refreshing
+        context?.let { ctx ->
+            // Stop playing any currently playing song
+            val stopIntent = Intent(ctx, MusicService::class.java).apply {
+                action = MusicService.ACTION_STOP
+            }
+            ctx.startService(stopIntent)
+
+            // Clear the current queue explicitly
+            val clearIntent = Intent(ctx, MusicService::class.java).apply {
+                action = MusicService.ACTION_CLEAR_QUEUE
+            }
+            ctx.startService(clearIntent)
+        }
+
+        // Reset pagination/local state and reload first page
+        _isLoading.value = true
         currentPage = 1
         hasMoreSongs = true
         _songs.value = emptyList()
         isRefreshing = true
+        autoPlayAfterRefresh = true
         _currentSongsStart.value = 0
         _currentSongsEnd.value = 0
         currentPlaylistId?.let { loadPlaylist(it) }
@@ -440,6 +464,10 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         action = MusicService.ACTION_SET_PLAYLIST
                         putParcelableArrayListExtra(MusicService.EXTRA_PLAYLIST, ArrayList(_songs.value))
                         putExtra("START_INDEX", songIndex)
+                        // Provide playlist pagination context so service can load more
+                        putExtra("PLAYLIST_ID", currentPlaylistId)
+                        putExtra("NEXT_PAGE", currentPage)
+                        putExtra("HAS_MORE", hasMoreSongs)
                     }
                     ctx.startService(intent)
                 } else {

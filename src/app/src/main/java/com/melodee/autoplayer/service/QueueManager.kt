@@ -89,6 +89,21 @@ class QueueManager {
         // Add to play history
         addToHistory(song)
     }
+
+    // Append songs to the end of the queue without changing the current song/index
+    fun appendToQueue(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        val currentList = _currentQueue.value.toMutableList()
+        currentList.addAll(songs)
+        _currentQueue.value = currentList
+        _originalQueue.value = currentList
+
+        // If shuffle is enabled, regenerate shuffle order preserving current playing index
+        if (_isShuffleEnabled.value && _currentIndex.value >= 0) {
+            createShuffleOrder(_currentIndex.value)
+        }
+        Log.d("QueueManager", "Appended ${songs.size} songs to queue. New size: ${currentList.size}")
+    }
     
     fun removeFromQueue(index: Int) {
         val currentList = _currentQueue.value.toMutableList()

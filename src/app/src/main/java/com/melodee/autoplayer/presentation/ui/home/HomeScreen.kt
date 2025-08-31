@@ -214,6 +214,12 @@ fun HomeScreen(
             ) {
                 // User header
                 user?.let { currentUser ->
+                    var attemptedUserAvatarRefresh by remember { mutableStateOf(false) }
+                    // If thumbnail is blank or previous load failed, try fetching user once
+                    if (!attemptedUserAvatarRefresh && currentUser.thumbnailUrl.isBlank()) {
+                        attemptedUserAvatarRefresh = true
+                        viewModel.refreshUserFromApiIfNeeded()
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -230,6 +236,10 @@ fun HomeScreen(
                             error = painterResource(id = R.drawable.ic_launcher_foreground),
                             onError = {
                                 Log.e("HomeScreen", "Failed to load user avatar: ${currentUser.thumbnailUrl}")
+                                if (!attemptedUserAvatarRefresh) {
+                                    attemptedUserAvatarRefresh = true
+                                    viewModel.refreshUserFromApiIfNeeded()
+                                }
                             },
                             contentScale = ContentScale.Crop
                         )
@@ -336,33 +346,44 @@ fun HomeScreen(
                         Column(
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            if (searchQuery.isNotEmpty() && songs.isNotEmpty()) {
-                                com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
-                                    start = currentPageStart,
-                                    end = currentPageEnd,
-                                    total = totalSearchResults,
-                                    label = "results"
-                                )
-                            }
-                            
-                            // Album songs position indicator (above the list)
-                            if (showAlbumSongs && songs.isNotEmpty() && totalSearchResults > 0) {
-                                com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
-                                    start = currentPageStart,
-                                    end = currentPageEnd,
-                                    total = totalSearchResults,
-                                    label = "songs"
-                                )
-                            }
-                            
-                            // Album position indicator (above the list)
-                            if (showAlbums && albums.isNotEmpty() && totalAlbums > 0) {
-                                com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
-                                    start = currentAlbumsStart,
-                                    end = currentAlbumsEnd,
-                                    total = totalAlbums,
-                                    label = "albums"
-                                )
+                            // Show only one progress indicator at a time
+                            when {
+                                // Album songs browsing
+                                showAlbumSongs && songs.isNotEmpty() && totalSearchResults > 0 -> {
+                                    com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                        start = currentPageStart,
+                                        end = currentPageEnd,
+                                        total = totalSearchResults,
+                                        label = "songs"
+                                    )
+                                }
+                                // Albums browsing
+                                showAlbums && albums.isNotEmpty() && totalAlbums > 0 -> {
+                                    com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                        start = currentAlbumsStart,
+                                        end = currentAlbumsEnd,
+                                        total = totalAlbums,
+                                        label = "albums"
+                                    )
+                                }
+                                // Search results
+                                searchQuery.isNotEmpty() && songs.isNotEmpty() -> {
+                                    com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                        start = currentPageStart,
+                                        end = currentPageEnd,
+                                        total = totalSearchResults,
+                                        label = "results"
+                                    )
+                                }
+                                // Browsing songs for selected artist (no search/albums view)
+                                selectedArtist != null && !showAlbums && !showAlbumSongs && songs.isNotEmpty() -> {
+                                    com.melodee.autoplayer.presentation.ui.components.DisplayProgress(
+                                        start = currentPageStart,
+                                        end = currentPageEnd,
+                                        total = totalSearchResults,
+                                        label = "songs"
+                                    )
+                                }
                             }
                             LazyColumn(
                                 state = listState,

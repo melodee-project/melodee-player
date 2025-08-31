@@ -48,6 +48,11 @@ class MusicService : MediaBrowserServiceCompat() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var positionUpdateJob: Job? = null
     private var prefetchJob: Job? = null
+    private var isFetchingNextPlaylistPage: Boolean = false
+    private var remotePlaylistId: String? = null
+    private var nextPlaylistPage: Int = 1
+    private var hasMorePlaylistPages: Boolean = false
+    private val paginationPrefetchThreshold = 3 // when within 3 songs of end, prefetch next page
     
     // Audio focus management
     private lateinit var audioManager: AudioManager
@@ -731,6 +736,10 @@ class MusicService : MediaBrowserServiceCompat() {
             ACTION_SET_PLAYLIST -> {
                 val songs = intent.getParcelableArrayListExtra<Song>(EXTRA_PLAYLIST)
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
+                // Capture playlist pagination context if provided
+                remotePlaylistId = intent.getStringExtra("PLAYLIST_ID")
+                nextPlaylistPage = intent.getIntExtra("NEXT_PAGE", 1)
+                hasMorePlaylistPages = intent.getBooleanExtra("HAS_MORE", false)
                 if (songs != null) {
                     // Context set by playbackManager.setQueue call
                     queueManager().setQueue(songs, startIndex)
@@ -741,6 +750,8 @@ class MusicService : MediaBrowserServiceCompat() {
                     
                     if (songs.isNotEmpty() && startIndex < songs.size) {
                         playSong(songs[startIndex])
+                        // Proactively prefetch next page if we're near the end of this page
+                        maybePrefetchNextPageIfNeeded()
                     }
                 }
             }
@@ -1340,9 +1351,29 @@ class MusicService : MediaBrowserServiceCompat() {
                     playlistManager().playSong(nextSong)
                     playSong(nextSong)
                     Log.d("MusicService", "Successfully started playing next song: ${nextSong.title}")
+                    // Proactively prefetch next page if we're nearing end of current queue page
+                    maybePrefetchNextPageIfNeeded()
                 } else {
-                    Log.d("MusicService", "No next song available, stopping playback")
-                    stopPlayback()
+                    Log.d("MusicService", "No next song available in current queue")
+                    // Attempt to load the next page of the playlist if available
+                    if (getCurrentPlaybackContext() == PlaybackContext.PLAYLIST && hasMorePlaylistPages && remotePlaylistId != null && !isFetchingNextPlaylistPage) {
+                        Log.d("MusicService", "Fetching next playlist page: $nextPlaylistPage for $remotePlaylistId")
+                        isFetchingNextPlaylistPage = true
+                        serviceScope.launch {
+                            val appended = fetchAndAppendNextPlaylistPage()
+                            isFetchingNextPlaylistPage = false
+                            if (appended) {
+                                // Try skipping again now that queue grew
+                                withContext(Dispatchers.Main) { skipToNext() }
+                            } else {
+                                Log.d("MusicService", "No more songs to append; stopping playback")
+                                withContext(Dispatchers.Main) { stopPlayback() }
+                            }
+                        }
+                    } else {
+                        Log.d("MusicService", "No more pages or missing playlist context; stopping playback")
+                        stopPlayback()
+                    }
                 }
             }
             PlaybackContext.SINGLE_SONG -> {
@@ -1350,6 +1381,59 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.d("MusicService", "Single song finished, stopping playback")
                 stopPlayback()
             }
+        }
+    }
+
+    private suspend fun fetchAndAppendNextPlaylistPage(): Boolean {
+        val playlistId = remotePlaylistId ?: return false
+        if (!hasMorePlaylistPages) return false
+        return try {
+            val musicApi = NetworkModule.getMusicApi()
+            Log.d("MusicService", "Requesting playlist page $nextPlaylistPage for $playlistId")
+            val response = withContext(Dispatchers.IO) { musicApi.getPlaylistSongs(playlistId, nextPlaylistPage) }
+            val newSongs = response.data
+            Log.d("MusicService", "Fetched ${newSongs.size} new songs (hasNext=${response.meta.hasNext})")
+            if (newSongs.isNotEmpty()) {
+                // Append without altering current playing index
+                queueManager().appendToQueue(newSongs)
+                // Keep playlist manager in sync (it just mirrors queue for now)
+                playlistManager().setPlaylist(queueManager().currentQueue.value, queueManager().currentIndex.value)
+                // Update pagination state
+                hasMorePlaylistPages = response.meta.hasNext
+                nextPlaylistPage = response.meta.currentPage + 1
+                // Inform AA clients that queue changed
+                notifyQueueChanged()
+                true
+            } else {
+                hasMorePlaylistPages = false
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("MusicService", "Error fetching next playlist page", e)
+            false
+        }
+    }
+
+    private fun maybePrefetchNextPageIfNeeded() {
+        try {
+            if (getCurrentPlaybackContext() != PlaybackContext.PLAYLIST) return
+            if (!hasMorePlaylistPages || remotePlaylistId == null || isFetchingNextPlaylistPage) return
+            val size = queueManager().currentQueue.value.size
+            val idx = queueManager().currentIndex.value
+            val remaining = size - idx - 1
+            if (remaining <= paginationPrefetchThreshold) {
+                Log.d("MusicService", "Near end of queue page (remaining=$remaining). Prefetching page $nextPlaylistPage...")
+                isFetchingNextPlaylistPage = true
+                serviceScope.launch {
+                    val appended = fetchAndAppendNextPlaylistPage()
+                    isFetchingNextPlaylistPage = false
+                    if (appended) {
+                        Log.d("MusicService", "Next page appended in advance; queue size now ${queueManager().currentQueue.value.size}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("MusicService", "maybePrefetchNextPageIfNeeded error: ${e.message}")
         }
     }
 
@@ -1437,6 +1521,10 @@ class MusicService : MediaBrowserServiceCompat() {
         // Clear browsing context
         currentBrowsingPlaylistId = null
         currentBrowsingPlaylistSongs = emptyList()
+        // Clear remote playlist pagination context
+        remotePlaylistId = null
+        nextPlaylistPage = 1
+        hasMorePlaylistPages = false
         
         // Clear search cache
         searchResultsCache = emptyList()
@@ -2371,6 +2459,14 @@ class MusicService : MediaBrowserServiceCompat() {
         fun addToQueue(song: Song) {
             val currentList = playbackManager.currentQueue.value.toMutableList()
             currentList.add(song)
+            playbackManager.setQueue(currentList, playbackManager.currentIndex.value)
+        }
+        
+        fun appendToQueue(songs: List<Song>) {
+            if (songs.isEmpty()) return
+            val currentList = playbackManager.currentQueue.value.toMutableList()
+            currentList.addAll(songs)
+            // Preserve current index
             playbackManager.setQueue(currentList, playbackManager.currentIndex.value)
         }
         

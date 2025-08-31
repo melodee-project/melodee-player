@@ -237,6 +237,17 @@ fun MainScreen(
     }
     val isAuthenticated by authenticationManager.isAuthenticated.collectAsStateWithLifecycle()
     
+    // Defensive auth restoration if persisted credentials exist
+    LaunchedEffect(isAuthenticated) {
+        if (!isAuthenticated) {
+            val settings = com.melodee.autoplayer.data.SettingsManager(context)
+            if (settings.isAuthenticated()) {
+                Log.w("MainActivity", "Auth state false but credentials present; restoring from storage")
+                authenticationManager.restoreAuthenticationFromStorage()
+            }
+        }
+    }
+
     // Handle navigation based on authentication state changes
     LaunchedEffect(isAuthenticated) {
         val currentRoute = navController.currentDestination?.route
@@ -498,6 +509,19 @@ fun MainScreen(
                 LoginScreen(
                     viewModel = loginViewModel,
                     onLoginSuccess = { authResponse ->
+                        // Ensure any existing playback is stopped and queue cleared on login
+                        try {
+                            val ctx = context
+                            val stopIntent = android.content.Intent(ctx, com.melodee.autoplayer.service.MusicService::class.java).apply {
+                                action = com.melodee.autoplayer.service.MusicService.ACTION_STOP
+                            }
+                            ctx.startService(stopIntent)
+                            val clearIntent = android.content.Intent(ctx, com.melodee.autoplayer.service.MusicService::class.java).apply {
+                                action = com.melodee.autoplayer.service.MusicService.ACTION_CLEAR_QUEUE
+                            }
+                            ctx.startService(clearIntent)
+                        } catch (_: Exception) {}
+                        
                         // Set base URL for both view models
                         homeViewModel.setBaseUrl(loginViewModel.serverUrl)
                         playlistViewModel.setBaseUrl(loginViewModel.serverUrl)
