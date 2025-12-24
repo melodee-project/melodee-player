@@ -4,17 +4,18 @@ import android.util.Log
 import com.melodee.autoplayer.data.api.ScrobbleApi
 import com.melodee.autoplayer.data.api.ScrobbleRequest
 import com.melodee.autoplayer.data.api.ScrobbleResult
+import com.melodee.autoplayer.data.api.ScrobbleRequestType
 import com.melodee.autoplayer.data.api.toScrobbleResult
 import com.melodee.autoplayer.domain.model.Song
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 
 class ScrobbleManager(
-    private val scrobbleApi: ScrobbleApi,
-    private val userId: String
+    private val scrobbleApi: ScrobbleApi
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val activeScrobbles = ConcurrentHashMap<String, ScrobbleTracker>()
+    private val defaultPlayerName = "MelodeePlayer"
     
     companion object {
         private const val TAG = "ScrobbleManager"
@@ -115,13 +116,15 @@ class ScrobbleManager(
             
             val request = ScrobbleRequest(
                 songId = tracker.song.id.toString(),
-                userId = userId,
+                playerName = defaultPlayerName,
                 scrobbleType = "nowPlaying",
-                timestamp = tracker.startTime
+                timestamp = (tracker.startTime / 1000.0),
+                playedDuration = 0.0,
+                scrobbleTypeValue = ScrobbleRequestType.NOW_PLAYING
             )
             
             // Log the scrobble request values
-            Log.i(TAG, "Scrobble Request (nowPlaying): songId=${request.songId}, userId=${request.userId}, scrobbleType=${request.scrobbleType}, timestamp=${request.timestamp}, playerName=${request.playerName}, playedDuration=${request.playedDuration}")
+            Log.i(TAG, "Scrobble Request (nowPlaying): songId=${request.songId}, scrobbleType=${request.scrobbleType}, scrobbleTypeValue=${request.scrobbleTypeValue}, timestamp=${request.timestamp}, playerName=${request.playerName}, playedDuration=${request.playedDuration}")
             
             val response = scrobbleApi.scrobble(request)
             val result = response.toScrobbleResult()
@@ -159,14 +162,15 @@ class ScrobbleManager(
             
             val request = ScrobbleRequest(
                 songId = tracker.song.id.toString(),
-                userId = userId,
+                playerName = defaultPlayerName,
                 scrobbleType = "played",
-                timestamp = System.currentTimeMillis(),
-                playedDuration = playedDuration
+                timestamp = (System.currentTimeMillis() / 1000.0),
+                playedDuration = (playedDuration / 1000.0),
+                scrobbleTypeValue = ScrobbleRequestType.PLAYED
             )
             
             // Log the scrobble request values
-            Log.i(TAG, "Scrobble Request (played): songId=${request.songId}, userId=${request.userId}, scrobbleType=${request.scrobbleType}, timestamp=${request.timestamp}, playerName=${request.playerName}, playedDuration=${request.playedDuration}")
+            Log.i(TAG, "Scrobble Request (played): songId=${request.songId}, scrobbleType=${request.scrobbleType}, scrobbleTypeValue=${request.scrobbleTypeValue}, timestamp=${request.timestamp}, playerName=${request.playerName}, playedDuration=${request.playedDuration}")
             
             val response = scrobbleApi.scrobble(request)
             val result = response.toScrobbleResult()

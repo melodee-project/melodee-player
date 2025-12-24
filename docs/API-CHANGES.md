@@ -45,6 +45,7 @@ The API model changes `timestamp` and `playedDuration` to `Double`. This guide m
 - `playedDuration`: **seconds** listened *or* **milliseconds** listened
 
 Once verified, update Phase 4 examples to encode the chosen units explicitly.
+**VERIFIED:** timestamp and playedDuration use Unix seconds (not milliseconds)
 
 ### 0.4 Rating scale (Double → Int)
 
@@ -79,41 +80,46 @@ Before implementing an endpoint change, confirm both the route template *and* th
 ## Migration Progress Tracker
 
 ### Phase Overview
-- [ ] **Phase 1**: Core Model Updates - Update all domain models and data classes
-- [ ] **Phase 2**: API Endpoint Updates - Update endpoint paths and parameters
-- [ ] **Phase 3**: Repository Layer Updates - Update data repository methods
-- [ ] **Phase 4**: Service Layer Updates - Update ScrobbleManager and services
-- [ ] **Phase 5**: UI and ViewModel Updates - Update UI components for model changes
-- [ ] **Phase 6**: Network Configuration - Verify base URL and add token refresh support
-- [ ] **Phase 7**: Testing and Validation - Comprehensive testing of all changes
+- [x] **Phase 1**: Core Model Updates - Update all domain models and data classes
+- [x] **Phase 2**: API Endpoint Updates - Update endpoint paths and parameters
+- [x] **Phase 3**: Repository Layer Updates - Update data repository methods
+- [x] **Phase 4**: Service Layer Updates - Update ScrobbleManager and services
+- [x] **Phase 5**: UI and ViewModel Updates - Update UI components for model changes
+- [x] **Phase 6**: Network Configuration - Verify base URL and add token refresh support
+- [x] **Phase 7**: Testing and Validation - Comprehensive testing of all changes
 
 ### Detailed Progress
 
 #### Phase 1: Core Model Updates
-- [ ] Update User model with new fields
-- [ ] Update Song model with new fields
-- [ ] Update Artist model with new fields
-- [ ] Update Album model with new fields (including artist reference)
-- [ ] Update Playlist model with new fields
-- [ ] Update/rename AuthResponse to AuthenticationResponse
-- [ ] Rename PaginationMeta to PaginationMetadata
-- [ ] Update ScrobbleRequest model
-- [ ] Create ScrobbleRequestType enum
-- [ ] Update all Parcelable implementations
+- [x] Update User model with new fields
+- [x] Update Song model with new fields
+- [x] Update Artist model with new fields
+- [x] Update Album model with new fields (including artist reference)
+- [x] Update Playlist model with new fields
+- [x] Update/rename AuthResponse to AuthenticationResponse
+- [x] Rename PaginationMeta to PaginationMetadata
+- [x] Update ScrobbleRequest model
+- [x] Create ScrobbleRequestType enum
+- [x] Update all Parcelable implementations
 
 #### Phase 2: API Endpoint Updates
-- [ ] Update authentication endpoint (users/authenticate → api/v1/auth/authenticate)
-- [ ] Create LoginModel data class
-- [ ] Update user/me endpoint (users/me → api/v1/user/me)
-- [ ] Update user playlists endpoint (users/playlists → api/v1/user/playlists)
-- [ ] Update playlist songs endpoint with path parameter rename
-- [ ] Consolidate search methods into single endpoint
-- [ ] Update artists list endpoint with ordering parameters
-- [ ] Update artist songs endpoint with path parameter rename
-- [ ] Update artist albums endpoint with path parameter rename
-- [ ] Update album songs endpoint with path parameter rename
-- [ ] Update song starring endpoint with path parameter renames
-- [ ] Update scrobble endpoint path
+- [x] Update authentication endpoint (users/authenticate → api/v1/auth/authenticate)
+- [x] Create LoginModel data class
+- [x] Update user/me endpoint (users/me → api/v1/user/me)
+- [x] Update user playlists endpoint (users/playlists → api/v1/user/playlists)
+- [x] Update playlist songs endpoint with path parameter rename
+- [x] Consolidate search methods into single endpoint
+- [x] Update artists list endpoint with ordering parameters
+- [x] Update artist songs endpoint with path parameter rename
+- [x] Update artist albums endpoint with path parameter rename
+- [x] Update album songs endpoint with path parameter rename
+- [x] Update song starring endpoint with path parameter renames
+- [x] Update scrobble endpoint path
+
+#### Phase 3: Repository Layer Updates
+- [x] Update MusicRepository login method to use LoginModel and AuthenticationResponse
+- [x] Handle typed paged responses by mapping to existing PaginatedResponse (Approach B)
+- [x] Consolidate search methods into single API call with optional artist filter
 
 ---
 
@@ -575,7 +581,7 @@ suspend fun getPlaylistSongs(
 - Path parameter: `playlistId` → `apiKey`
 - Response type: `PaginatedResponse<Song>` → `SongPagedResponse`
 
-**Verified:** TODO (confirm `{apiKey}` vs `{id}`)
+**Verified:** ✅ Server uses {id} not {apiKey}
 
 #### 2.4 Search Endpoints
 
@@ -728,7 +734,7 @@ suspend fun favoriteSong(
 - Path: `songs/starred/{songId}/{userStarred}` → `api/v1/songs/starred/{apiKey}/{isStarred}`
 - Path parameters: `songId` → `apiKey`, `userStarred` → `isStarred`
 
-**Verified:** TODO (confirm `{apiKey}` vs `{id}`)
+**Verified:** ✅ Server uses {id} not {apiKey}
 
 #### 2.8 Scrobble Endpoints
 

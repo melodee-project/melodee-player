@@ -164,13 +164,12 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun initializeScrobbleManager() {
         try {
-            val userId = settingsManager.userId
-            if (userId.isNotEmpty()) {
+            if (NetworkModule.isAuthenticated()) {
                 val scrobbleApi = NetworkModule.getScrobbleApi()
-                scrobbleManager = ScrobbleManager(scrobbleApi, userId)
-                Log.d("MusicService", "ScrobbleManager initialized for user: $userId")
+                scrobbleManager = ScrobbleManager(scrobbleApi)
+                Log.d("MusicService", "ScrobbleManager initialized")
             } else {
-                Log.w("MusicService", "No user ID found, scrobbling disabled")
+                Log.w("MusicService", "Not authenticated, scrobbling disabled")
             }
         } catch (e: Exception) {
             Log.e("MusicService", "Failed to initialize ScrobbleManager", e)

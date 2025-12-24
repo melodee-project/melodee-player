@@ -5,6 +5,7 @@ import android.util.Log
 import com.melodee.autoplayer.MelodeeApplication
 import com.melodee.autoplayer.data.AuthenticationManager
 import com.melodee.autoplayer.data.api.NetworkModule
+import com.melodee.autoplayer.domain.model.LoginModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,10 +38,7 @@ class AuthenticationHelper(private val context: Context) {
                 
                 // Attempt authentication
                 val musicApi = NetworkModule.getMusicApi()
-                val credentials = mapOf(
-                    "email" to email,
-                    "password" to password
-                )
+                val credentials = LoginModel(email = email, password = password)
                 
                 val authResponse = musicApi.login(credentials)
                 

@@ -1,11 +1,17 @@
 package com.melodee.autoplayer.data.api
 
 import android.util.Log
+import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.melodee.autoplayer.util.Logger
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -172,10 +178,42 @@ object NetworkModule {
 
         val okHttpClient = okHttpBuilder.build()
 
+        // Create Gson with explicit UUID adapter for safe error handling
+        val gson = GsonBuilder()
+            .registerTypeAdapter(UUID::class.java, object : TypeAdapter<UUID>() {
+                override fun write(out: JsonWriter, value: UUID?) {
+                    out.value(value?.toString())
+                }
+
+                override fun read(reader: JsonReader): UUID? {
+                    return try {
+                        if (reader.peek() == JsonToken.NULL) {
+                            reader.nextNull()
+                            Log.w("NetworkModule", "Received null/blank UUID, using empty UUID")
+                            return UUID(0, 0)
+                        }
+                        val str = reader.nextString()
+                        if (str.isNullOrBlank()) {
+                            Log.w("NetworkModule", "Received null/blank UUID, using empty UUID")
+                            UUID(0, 0)
+                        } else {
+                            UUID.fromString(str)
+                        }
+                    } catch (e: IllegalArgumentException) {
+                        Log.e("NetworkModule", "Invalid UUID format: ${e.message}, using empty UUID")
+                        UUID(0, 0)
+                    } catch (e: IllegalStateException) {
+                        Log.e("NetworkModule", "Invalid UUID token: ${e.message}, using empty UUID")
+                        UUID(0, 0)
+                    }
+                }
+            })
+            .create()
+
         retrofit = Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
 
         musicApi = retrofit?.create(MusicApi::class.java)

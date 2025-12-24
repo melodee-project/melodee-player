@@ -5,24 +5,24 @@ import java.net.URISyntaxException
 
 /**
  * Utility class for parsing and normalizing server URLs to ensure they always
- * end with "/api/v1/" regardless of user input format.
+ * end with a single trailing slash at the host root (no API path).
  */
 object UrlParser {
     
     /**
-     * Normalizes a server URL to the format: <scheme>://<hostname>[:<port>]/api/v1/
+     * Normalizes a server URL to the format: <scheme>://<hostname>[:<port>]/
      * 
      * Examples:
-     * - "localhost" -> "https://localhost/api/v1/"
-     * - "http://localhost" -> "http://localhost/api/v1/"
-     * - "192.168.1.1:8080" -> "https://192.168.1.1:8080/api/v1/"
-     * - "https://music.example.com/api" -> "https://music.example.com/api/v1/"
-     * - "http://server.com/api/v1/songs" -> "http://server.com/api/v1/"
-     * - "::1" -> "https://[::1]/api/v1/"
-     * - "[2001:db8::1]:8080" -> "https://[2001:db8::1]:8080/api/v1/"
+     * - "localhost" -> "https://localhost/"
+     * - "http://localhost" -> "http://localhost/"
+     * - "192.168.1.1:8080" -> "https://192.168.1.1:8080/"
+     * - "https://music.example.com/api" -> "https://music.example.com/"
+     * - "http://server.com/api/v1/songs" -> "http://server.com/"
+     * - "::1" -> "https://[::1]/"
+     * - "[2001:db8::1]:8080" -> "https://[2001:db8::1]:8080/"
      * 
      * @param inputUrl The user-provided URL string
-     * @return The normalized URL ending with "/api/v1/"
+     * @return The normalized URL ending with "/"
      */
     fun normalizeServerUrl(inputUrl: String): String {
         if (inputUrl.isBlank()) {
@@ -53,7 +53,7 @@ object UrlParser {
             }
             
             // Build the normalized URL
-            "$scheme://$host$port/api/v1/"
+            "$scheme://$host$port/"
             
         } catch (e: URISyntaxException) {
             // Fallback to string manipulation for malformed URLs
@@ -196,7 +196,7 @@ object UrlParser {
         }
         
         // Build the normalized URL
-        return "$scheme://$normalizedUrl/api/v1/"
+        return "$scheme://$normalizedUrl/"
     }
     
     /**
@@ -210,12 +210,12 @@ object UrlParser {
         
         return try {
             val uri = URI(normalizedUrl)
-            uri.scheme in listOf("http", "https") && 
+            uri.scheme in listOf("http", "https") &&
             !uri.host.isNullOrBlank() &&
-            uri.path == "/api/v1/"
+            uri.path == "/"
         } catch (e: URISyntaxException) {
             // If URI parsing fails, check if the normalized URL has the expected format
-            normalizedUrl.matches(Regex("^https?://[^/]+/api/v1/$"))
+            normalizedUrl.matches(Regex("^https?://[^/]+/$"))
         }
     }
 }

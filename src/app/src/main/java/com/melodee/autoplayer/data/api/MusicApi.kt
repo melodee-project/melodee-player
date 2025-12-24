@@ -4,74 +4,69 @@ import com.melodee.autoplayer.domain.model.*
 import retrofit2.http.*
 
 interface MusicApi {
-    @POST("users/authenticate")
+    @POST("api/v1/auth/authenticate")
     suspend fun login(
-        @Body credentials: Map<String, String>
-    ): AuthResponse
+        @Body credentials: LoginModel
+    ): AuthenticationResponse
 
     // Fetch current authenticated user profile
-    @GET("users/me")
+    @GET("api/v1/user/me")
     suspend fun getCurrentUser(): User
 
-    @GET("users/playlists")
+    @GET("api/v1/user/playlists")
     suspend fun getPlaylists(
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Playlist>
+    ): PlaylistPagedResponse
 
-    @GET("playlists/{playlistId}/songs")
+    @GET("api/v1/playlists/{id}/songs")
     suspend fun getPlaylistSongs(
-        @Path("playlistId") playlistId: String,
+        @Path("id") playlistId: String,
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Song>
+    ): SongPagedResponse
 
-    @GET("search/songs")
+    @GET("api/v1/search/songs")
     suspend fun searchSongs(
         @Query("q") query: String,
         @Query("page") page: Int,
-        @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Song>
+        @Query("pageSize") pageSize: Int = 50,
+        @Query("filterByArtistApiKey") artistId: String? = null
+    ): SongPagedResponse
 
-    @GET("artists")
+    @GET("api/v1/artists")
     suspend fun getArtists(
         @Query("q") query: String? = null,
         @Query("page") page: Int,
-        @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Artist>
+        @Query("pageSize") pageSize: Int = 50,
+        @Query("orderBy") orderBy: String? = null,
+        @Query("orderDirection") orderDirection: String? = null
+    ): ArtistPagedResponse
 
-    @GET("artists/{artistId}/songs")
+    @GET("api/v1/artists/{id}/songs")
     suspend fun getArtistSongs(
-        @Path("artistId") artistId: String,
+        @Path("id") artistId: String,
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Song>
+    ): SongPagedResponse
 
-    @GET("artists/{artistId}/albums")
+    @GET("api/v1/artists/{id}/albums")
     suspend fun getArtistAlbums(
-        @Path("artistId") artistId: String,
+        @Path("id") artistId: String,
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Album>
+    ): AlbumPagedResponse
 
-    @GET("albums/{albumId}/songs")
+    @GET("api/v1/albums/{id}/songs")
     suspend fun getAlbumSongs(
-        @Path("albumId") albumId: String,
+        @Path("id") albumId: String,
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Song>
+    ): SongPagedResponse
 
-    @GET("search/songs")
-    suspend fun searchSongsWithArtist(
-        @Query("q") query: String,
-        @Query("filterByArtistApiKey") artistId: String?,
-        @Query("page") page: Int,
-        @Query("pageSize") pageSize: Int = 50
-    ): PaginatedResponse<Song>
-
-    @POST("songs/starred/{songId}/{userStarred}")
+    @POST("api/v1/songs/starred/{id}/{isStarred}")
     suspend fun favoriteSong(
-        @Path("songId") songId: String,
-        @Path("userStarred") userStarred: Boolean
+        @Path("id") songId: String,
+        @Path("isStarred") userStarred: Boolean
     ): retrofit2.Response<Unit>
 }

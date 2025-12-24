@@ -1,19 +1,42 @@
 package com.melodee.autoplayer.data.api
 
+import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
+import com.google.gson.TypeAdapter
+import com.google.gson.annotations.JsonAdapter
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonWriter
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
-import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
 
 data class ScrobbleRequest(
     val songId: String,
-    val userId: String,
-    val scrobbleType: String, // "nowPlaying" or "played"
-    val timestamp: Long,
     val playerName: String = "MelodeePlayer",
-    val playedDuration: Long? = null // Duration played in milliseconds
+    @Deprecated("Use scrobbleTypeValue")
+    val scrobbleType: String? = null,
+    val timestamp: Double,
+    val playedDuration: Double,
+    val scrobbleTypeValue: ScrobbleRequestType
 )
+
+@JsonAdapter(ScrobbleRequestTypeAdapter::class)
+enum class ScrobbleRequestType(val value: Int) {
+    UNKNOWN(0),
+    NOW_PLAYING(1),
+    PLAYED(2)
+}
+
+class ScrobbleRequestTypeAdapter : TypeAdapter<ScrobbleRequestType>() {
+    override fun write(out: JsonWriter, value: ScrobbleRequestType) {
+        out.value(value.value)
+    }
+
+    override fun read(reader: JsonReader): ScrobbleRequestType {
+        val intValue = reader.nextInt()
+        return ScrobbleRequestType.values().firstOrNull { it.value == intValue } ?: ScrobbleRequestType.UNKNOWN
+    }
+}
 
 data class ScrobbleResponse(
     val message: String? = null
@@ -34,7 +57,7 @@ sealed class ScrobbleResult {
 }
 
 interface ScrobbleApi {
-    @POST("scrobble")
+    @POST("api/v1/scrobble")
     suspend fun scrobble(@Body request: ScrobbleRequest): Response<Void>
 }
 

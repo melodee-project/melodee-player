@@ -4,12 +4,13 @@ import android.content.Context
 import com.melodee.autoplayer.R
 import com.melodee.autoplayer.data.api.MusicApi
 import com.melodee.autoplayer.data.api.NetworkModule
+import com.melodee.autoplayer.domain.model.Album
+import com.melodee.autoplayer.domain.model.Artist
 import com.melodee.autoplayer.domain.model.AuthResponse
+import com.melodee.autoplayer.domain.model.LoginModel
 import com.melodee.autoplayer.domain.model.PaginatedResponse
 import com.melodee.autoplayer.domain.model.Playlist
 import com.melodee.autoplayer.domain.model.Song
-import com.melodee.autoplayer.domain.model.Artist
-import com.melodee.autoplayer.domain.model.Album
 import com.melodee.autoplayer.domain.model.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -28,13 +29,12 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
 
     fun login(emailOrUsername: String, password: String): Flow<AuthResponse> = flow {
         val response = ErrorHandler.handleOperation(context, "login", "MusicRepository") {
-            // Determine if input is email or username based on presence of @ symbol
-            val loginMap = if (emailOrUsername.contains("@")) {
-                mapOf("email" to emailOrUsername, "password" to password)
+            val loginModel = if (emailOrUsername.contains("@")) {
+                LoginModel(email = emailOrUsername, password = password)
             } else {
-                mapOf("userName" to emailOrUsername, "password" to password)
+                LoginModel(userName = emailOrUsername, password = password)
             }
-            val response = api.login(loginMap)
+            val response = api.login(loginModel)
             NetworkModule.setAuthToken(response.token)
             response
         }
@@ -45,7 +45,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
         val response = ErrorHandler.handleOperation(context, "getPlaylists", "MusicRepository") {
             api.getPlaylists(page)
         }
-        emit(response)
+        emit(PaginatedResponse(meta = response.meta, data = response.data))
     }
 
     fun getCurrentUser(): Flow<User> = flow {
@@ -59,7 +59,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
         val response = ErrorHandler.handleOperation(context, "getPlaylistSongs", "MusicRepository") {
             api.getPlaylistSongs(playlistId, page)
         }
-        emit(response)
+        emit(PaginatedResponse(meta = response.meta, data = response.data))
     }
 
     suspend fun searchSongs(query: String, page: Int = 1): Flow<PaginatedResponse<Song>> {
@@ -69,7 +69,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
                 val response = ErrorHandler.handleOperation(context, "searchSongs", "MusicRepository") {
                     api.searchSongs(query, page)
                 }
-                emit(response)
+                emit(PaginatedResponse(meta = response.meta, data = response.data))
             }
         }
     }
@@ -84,7 +84,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
                         page = page
                     )
                 }
-                emit(response)
+                emit(PaginatedResponse(meta = response.meta, data = response.data))
             }
         }
     }
@@ -93,26 +93,26 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
         val response = ErrorHandler.handleOperation(context, "getArtistSongs", "MusicRepository") {
             api.getArtistSongs(artistId, page)
         }
-        emit(response)
+        emit(PaginatedResponse(meta = response.meta, data = response.data))
     }
 
     fun getArtistAlbums(artistId: String, page: Int = 1): Flow<PaginatedResponse<Album>> = flow {
         val response = ErrorHandler.handleOperation(context, "getArtistAlbums", "MusicRepository") {
             api.getArtistAlbums(artistId, page)
         }
-        emit(response)
+        emit(PaginatedResponse(meta = response.meta, data = response.data))
     }
 
     fun getAlbumSongs(albumId: String, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
         val response = ErrorHandler.handleOperation(context, "getAlbumSongs", "MusicRepository") {
             api.getAlbumSongs(albumId, page)
         }
-        emit(response)
+        emit(PaginatedResponse(meta = response.meta, data = response.data))
     }
 
     fun searchSongsWithArtist(query: String, artistId: String?, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
-        val response = api.searchSongsWithArtist(query, artistId, page)
-        emit(response)
+        val response = api.searchSongs(query, page, artistId = artistId)
+        emit(PaginatedResponse(meta = response.meta, data = response.data))
     }
 
     suspend fun favoriteSong(songId: String, userStarred: Boolean): Boolean {
