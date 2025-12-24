@@ -48,7 +48,9 @@ class AuthenticationHelper(private val context: Context) {
                     userId = authResponse.user.id.toString(),
                     userEmail = authResponse.user.email,
                     username = authResponse.user.username,
-                    serverUrl = serverUrl
+                    serverUrl = serverUrl,
+                    refreshToken = authResponse.refreshToken,
+                    refreshTokenExpiresAt = authResponse.refreshTokenExpiresAt
                 )
                 
                 Log.d("AuthenticationHelper", "Login successful for: ${authResponse.user.username}")

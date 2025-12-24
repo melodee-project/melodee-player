@@ -31,6 +31,11 @@ object UrlParser {
         
         var url = inputUrl.trim()
         
+        // Bail early if nothing looks like a host
+        if (url.count { it.isLetterOrDigit() } == 0) {
+            return ""
+        }
+        
         // Handle IPv6 addresses that aren't already bracketed
         url = preprocessIPv6(url)
         
@@ -47,8 +52,8 @@ object UrlParser {
             val host = uri.host
             val port = if (uri.port > 0) ":${uri.port}" else ""
             
-            // Check if host is null or empty
-            if (host.isNullOrBlank()) {
+            // Check if host is null or empty or only separators
+            if (host.isNullOrBlank() || host.replace(":", "").isBlank()) {
                 return fallbackNormalization(url)
             }
             
@@ -191,7 +196,7 @@ object UrlParser {
         normalizedUrl = normalizedUrl.trimEnd('/')
         
         // If we ended up with an empty host, return empty
-        if (normalizedUrl.isBlank()) {
+        if (normalizedUrl.isBlank() || normalizedUrl.replace(":", "").isBlank()) {
             return ""
         }
         

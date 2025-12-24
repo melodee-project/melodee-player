@@ -344,8 +344,13 @@ class MusicService : MediaBrowserServiceCompat() {
                                     .setMediaId("playlist_${playlist.id}")
                                     .setTitle(playlist.name)
                                     .setSubtitle("${playlist.songCount} songs")
-                                    .setDescription(playlist.description ?: "")
-                                    .setIconUri(android.net.Uri.parse(playlist.imageUrl ?: "android.resource://$packageName/${R.drawable.ic_playlist_music}"))
+                                    .setDescription(playlist.description)
+                                    .setIconUri(
+                                        android.net.Uri.parse(
+                                            playlist.imageUrl.takeIf { it.isNotBlank() }
+                                                ?: "android.resource://$packageName/${R.drawable.ic_playlist_music}"
+                                        )
+                                    )
                                     .build(),
                                 MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
                             )
@@ -714,7 +719,7 @@ class MusicService : MediaBrowserServiceCompat() {
         
         when (intent?.action) {
             ACTION_PLAY_SONG -> {
-                val song = intent.getParcelableExtra<Song>(EXTRA_SONG)
+                val song = intent.getParcelableExtra(EXTRA_SONG, Song::class.java)
                 Log.d("MusicService", "Received play command for song: ${song?.title}")
                 if (song != null) {
                     // Set context to single song if no queue is set
@@ -733,7 +738,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 }
             }
             ACTION_SET_PLAYLIST -> {
-                val songs = intent.getParcelableArrayListExtra<Song>(EXTRA_PLAYLIST)
+                val songs = intent.getParcelableArrayListExtra(EXTRA_PLAYLIST, Song::class.java)
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
                 // Capture playlist pagination context if provided
                 remotePlaylistId = intent.getStringExtra("PLAYLIST_ID")
@@ -755,7 +760,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 }
             }
             ACTION_SET_SEARCH_RESULTS -> {
-                val songs = intent.getParcelableArrayListExtra<Song>(EXTRA_SEARCH_RESULTS)
+                val songs = intent.getParcelableArrayListExtra(EXTRA_SEARCH_RESULTS, Song::class.java)
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
                 if (songs != null) {
                     // Context set by playbackManager.setQueue call
@@ -1571,6 +1576,7 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.i("MusicService", "App name: Melodee Player")
         
         // Set flags for Android Auto compatibility
+        @Suppress("DEPRECATION")
         mediaSession?.setFlags(
             MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
             MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
@@ -2007,7 +2013,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 val results = performApiSearch(query)
                 Log.i("MusicService", "Test search returned ${results.size} results")
                 results.forEach { item ->
-                    Log.i("MusicService", "Result: ${item.description?.title} - ${item.description?.subtitle}")
+                    val desc = item.description
+                    Log.i("MusicService", "Result: ${desc.title} - ${desc.subtitle}")
                 }
             } catch (e: Exception) {
                 Log.e("MusicService", "Test search failed", e)
@@ -2506,7 +2513,6 @@ class MusicService : MediaBrowserServiceCompat() {
         }
         
         fun setRepeatMode(mode: QueueManager.RepeatMode) {
-            val currentMode = playbackManager.repeatMode.value
             val targetMode = when (mode) {
                 QueueManager.RepeatMode.NONE -> MusicPlaybackManager.RepeatMode.NONE
                 QueueManager.RepeatMode.ONE -> MusicPlaybackManager.RepeatMode.ONE

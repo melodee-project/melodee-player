@@ -2,6 +2,7 @@ package com.melodee.autoplayer.domain.model
 
 import android.os.Parcel
 import android.os.Parcelable
+import androidx.core.os.ParcelCompat
 import android.util.Log
 import java.util.UUID
 
@@ -107,8 +108,8 @@ data class Song(
         id = parcel.readUuidString(),
         streamUrl = parcel.readStringOrEmpty(),
         title = parcel.readStringOrEmpty(),
-        artist = parcel.readParcelable(Artist::class.java.classLoader) ?: emptyArtist(),
-        album = parcel.readParcelable(Album::class.java.classLoader) ?: emptyAlbum(),
+        artist = ParcelCompat.readParcelable(parcel, Artist::class.java.classLoader, Artist::class.java) ?: emptyArtist(),
+        album = ParcelCompat.readParcelable(parcel, Album::class.java.classLoader, Album::class.java) ?: emptyAlbum(),
         thumbnailUrl = parcel.readStringOrEmpty(),
         imageUrl = parcel.readStringOrEmpty(),
         durationMs = parcel.readDouble(),
@@ -237,7 +238,7 @@ data class Album(
         releaseYear = parcel.readInt(),
         userStarred = parcel.readBooleanByte(),
         userRating = parcel.readInt(),
-        artist = parcel.readParcelable(Artist::class.java.classLoader),
+        artist = ParcelCompat.readParcelable(parcel, Artist::class.java.classLoader, Artist::class.java),
         songCount = parcel.readInt(),
         durationMs = parcel.readDouble(),
         durationFormatted = parcel.readStringOrEmpty(),
@@ -289,6 +290,31 @@ data class LoginModel(
     val email: String? = null,
     val password: String
 )
+
+data class RefreshRequest(
+    val refreshToken: String
+)
+
+data class ServerInfo(
+    val name: String? = null,
+    val description: String? = null,
+    val majorVersion: Int = 0,
+    val minorVersion: Int = 0,
+    val patchVersion: Int = 0,
+    val version: String? = null
+) {
+    fun isCompatibleVersion(): Boolean {
+        return when {
+            majorVersion > 1 -> true
+            majorVersion == 1 && minorVersion >= 2 -> true
+            else -> false
+        }
+    }
+    
+    fun getVersionString(): String {
+        return "$majorVersion.$minorVersion.$patchVersion"
+    }
+}
 
 data class User(
     val id: UUID,

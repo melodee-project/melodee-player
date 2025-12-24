@@ -14,7 +14,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.MediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import kotlinx.coroutines.CancellationException
 
 import java.io.File
@@ -46,9 +46,8 @@ object MediaCache {
         }
     }
 
-    fun mediaSourceFactory(context: Context): MediaSourceFactory {
-        return DefaultMediaSourceFactory(dataSourceFactory(context))
-    }
+    fun mediaSourceFactory(context: Context): MediaSource.Factory =
+        DefaultMediaSourceFactory(dataSourceFactory(context))
 
     fun dataSourceFactory(context: Context): DataSource.Factory {
         val upstream = DefaultHttpDataSource.Factory()

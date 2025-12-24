@@ -9,6 +9,15 @@ interface MusicApi {
         @Body credentials: LoginModel
     ): AuthenticationResponse
 
+    @GET("api/v1/system/info")
+    suspend fun getSystemInfo(): ServerInfo
+
+    @POST("api/v1/auth/refresh")
+    suspend fun refresh(
+        @Body request: RefreshRequest,
+        @Header("X-Refresh-Request") skipAuthHeader: Boolean = true
+    ): AuthenticationResponse
+
     // Fetch current authenticated user profile
     @GET("api/v1/user/me")
     suspend fun getCurrentUser(): User

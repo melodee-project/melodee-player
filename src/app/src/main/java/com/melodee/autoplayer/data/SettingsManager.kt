@@ -43,6 +43,14 @@ class SettingsManager(context: Context) {
             prefs.edit().putString(KEY_AUTH_TOKEN, value).apply()
         }
 
+    var refreshToken: String
+        get() = prefs.getString(KEY_REFRESH_TOKEN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
+
+    var refreshTokenExpiresAt: String
+        get() = prefs.getString(KEY_REFRESH_TOKEN_EXPIRES_AT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN_EXPIRES_AT, value).apply()
+
     // Check if user is currently authenticated
     fun isAuthenticated(): Boolean {
         val hasToken = authToken.isNotEmpty()
@@ -64,6 +72,8 @@ class SettingsManager(context: Context) {
         userEmail: String,
         username: String,
         serverUrl: String,
+        refreshToken: String = "",
+        refreshTokenExpiresAt: String = "",
         thumbnailUrl: String = "",
         imageUrl: String = ""
     ) {
@@ -75,9 +85,12 @@ class SettingsManager(context: Context) {
         Log.i("SettingsManager", "Server URL: $serverUrl")
         Log.i("SettingsManager", "Thumbnail URL: $thumbnailUrl")
         Log.i("SettingsManager", "Image URL: $imageUrl")
+        Log.i("SettingsManager", "Refresh token present: ${refreshToken.isNotEmpty()}")
         
         val editor = prefs.edit()
         editor.putString(KEY_AUTH_TOKEN, token)
+        editor.putString(KEY_REFRESH_TOKEN, refreshToken)
+        editor.putString(KEY_REFRESH_TOKEN_EXPIRES_AT, refreshTokenExpiresAt)
         editor.putString(KEY_USER_ID, userId)
         editor.putString(KEY_USER_EMAIL, userEmail)
         editor.putString(KEY_USER_NAME, username)
@@ -106,6 +119,8 @@ class SettingsManager(context: Context) {
             .remove(KEY_USER_THUMBNAIL_URL)
             .remove(KEY_USER_IMAGE_URL)
             .remove(KEY_AUTH_TOKEN)
+            .remove(KEY_REFRESH_TOKEN)
+            .remove(KEY_REFRESH_TOKEN_EXPIRES_AT)
             .apply()
     }
 
@@ -118,5 +133,7 @@ class SettingsManager(context: Context) {
         private const val KEY_USER_THUMBNAIL_URL = "user_thumbnail_url"
         private const val KEY_USER_IMAGE_URL = "user_image_url"
         private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_REFRESH_TOKEN_EXPIRES_AT = "refresh_token_expires_at"
     }
 }

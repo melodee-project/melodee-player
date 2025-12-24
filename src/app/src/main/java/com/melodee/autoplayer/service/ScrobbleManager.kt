@@ -8,6 +8,7 @@ import com.melodee.autoplayer.data.api.ScrobbleRequestType
 import com.melodee.autoplayer.data.api.toScrobbleResult
 import com.melodee.autoplayer.domain.model.Song
 import kotlinx.coroutines.*
+import kotlin.math.min
 import java.util.concurrent.ConcurrentHashMap
 
 class ScrobbleManager(
@@ -108,6 +109,7 @@ class ScrobbleManager(
         }
     }
     
+    @Suppress("DEPRECATION")
     private suspend fun scrobbleNowPlaying(tracker: ScrobbleTracker) {
         if (tracker.nowPlayingScrobbled) return
         
@@ -152,13 +154,14 @@ class ScrobbleManager(
         }
     }
     
+    @Suppress("DEPRECATION")
     private suspend fun scrobblePlayed(tracker: ScrobbleTracker, duration: Long) {
         if (tracker.playedScrobbled) return
         
         try {
             Log.d(TAG, "Scrobbling 'played' for song: ${tracker.song.title}")
             
-            val playedDuration = System.currentTimeMillis() - tracker.startTime
+            val playedDuration = min(System.currentTimeMillis() - tracker.startTime, duration)
             
             val request = ScrobbleRequest(
                 songId = tracker.song.id.toString(),

@@ -67,6 +67,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         settingsManager.userThumbnailUrl = response.user.thumbnailUrl
                         settingsManager.userImageUrl = response.user.imageUrl
                         settingsManager.authToken = response.token
+                        settingsManager.refreshToken = response.refreshToken
+                        settingsManager.refreshTokenExpiresAt = response.refreshTokenExpiresAt
                         
                         // Inform global AuthenticationManager so app state reflects authenticated
                         try {
@@ -77,6 +79,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                                 userEmail = response.user.email,
                                 username = response.user.username,
                                 serverUrl = this@LoginViewModel.serverUrl,
+                                refreshToken = response.refreshToken,
+                                refreshTokenExpiresAt = response.refreshTokenExpiresAt,
                                 thumbnailUrl = response.user.thumbnailUrl,
                                 imageUrl = response.user.imageUrl
                             )

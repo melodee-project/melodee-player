@@ -7,6 +7,8 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.melodee.autoplayer.util.Logger
+import com.melodee.autoplayer.domain.model.RefreshRequest
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -24,6 +26,7 @@ object NetworkModule {
     private var appContext: android.content.Context? = null
     private var baseUrl: String = ""
     private var authToken: String = ""
+    private var refreshToken: String = ""
     private var retrofit: Retrofit? = null
     private var musicApi: MusicApi? = null
     private var scrobbleApi: ScrobbleApi? = null
@@ -34,9 +37,12 @@ object NetworkModule {
     // Callback for handling authentication failures
     @Volatile
     private var onAuthenticationFailure: (() -> Unit)? = null
+    @Volatile
+    private var onTokenUpdated: ((String, String) -> Unit)? = null
     
     // Thread-safe flag to prevent multiple 401 callbacks
     private val handlingAuthFailure = AtomicBoolean(false)
+    private val refreshLock = Any()
 
     fun init(context: android.content.Context) {
         // Keep application context only
@@ -63,19 +69,24 @@ object NetworkModule {
         }
     }
 
-    fun setAuthToken(token: String) {
+    fun setTokens(token: String, refresh: String) {
         configLock.write {
-            Logger.logAuth("NetworkModule", "Setting auth token (present: ${token.isNotEmpty()})")
-            
+            Logger.logAuth("NetworkModule", "Setting auth token (present: ${token.isNotEmpty()}); refresh present: ${refresh.isNotEmpty()}")
             authToken = token
-            // Reset auth failure flag when setting new token
+            refreshToken = refresh
             handlingAuthFailure.set(false)
-            // Recreate the Retrofit instance to update the auth token
-            Logger.d("NetworkModule", "Recreating Retrofit instance with new token")
+            Logger.d("NetworkModule", "Recreating Retrofit instance with updated tokens")
             createRetrofitInstance()
-            
-            Logger.logAuth("NetworkModule", "Auth token configured")
+            Logger.logAuth("NetworkModule", "Tokens configured")
         }
+    }
+
+    fun setAuthToken(token: String) {
+        setTokens(token, refreshToken)
+    }
+
+    fun setRefreshToken(token: String) {
+        setTokens(authToken, token)
     }
 
     fun getAuthToken(): String? {
@@ -88,11 +99,16 @@ object NetworkModule {
     fun setAuthenticationFailureCallback(callback: () -> Unit) {
         onAuthenticationFailure = callback
     }
+
+    fun setTokenUpdateCallback(callback: (newAccessToken: String, newRefreshToken: String) -> Unit) {
+        onTokenUpdated = callback
+    }
     
     // Clear authentication
     fun clearAuthentication() {
         configLock.write {
             authToken = ""
+            refreshToken = ""
             handlingAuthFailure.set(false)
             createRetrofitInstance()
         }
@@ -101,7 +117,7 @@ object NetworkModule {
     // Check if authenticated
     fun isAuthenticated(): Boolean {
         return configLock.read {
-            authToken.isNotEmpty() && baseUrl.isNotEmpty()
+            (authToken.isNotEmpty() || refreshToken.isNotEmpty()) && baseUrl.isNotEmpty()
         }
     }
 
@@ -126,23 +142,33 @@ object NetworkModule {
             .connectionPool(connectionPool)
             .addInterceptor { chain ->
                 val original = chain.request()
-                val request = original.newBuilder()
-                    .header("Authorization", "Bearer $authToken")
-                    // Pass through request priority if set by callers via header
-                    // e.g., request.header("X-Request-Priority")
+                val skipAuth = original.header("X-Refresh-Request") == "true"
+                val requestBuilder = original.newBuilder()
                     .method(original.method, original.body)
-                    .build()
-                
-                val response = chain.proceed(request)
-                
-                // Handle 401 Unauthorized responses
-                if (response.code == 401 && handlingAuthFailure.compareAndSet(false, true)) {
-                    Log.w("NetworkModule", "Received 401 Unauthorized - token expired")
-                    // Clear authentication and notify callback
-                    clearAuthentication()
-                    onAuthenticationFailure?.invoke()
+
+                if (!skipAuth && authToken.isNotEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer $authToken")
                 }
-                
+
+                var response = chain.proceed(requestBuilder.build())
+
+                // Handle 401 Unauthorized responses with a single refresh attempt
+                if (!skipAuth && response.code == 401) {
+                    response.close()
+                    val refreshed = attemptTokenRefresh()
+                    if (refreshed) {
+                        val retry = original.newBuilder()
+                            .method(original.method, original.body)
+                            .header("Authorization", "Bearer $authToken")
+                            .build()
+                        response = chain.proceed(retry)
+                    } else if (handlingAuthFailure.compareAndSet(false, true)) {
+                        Log.w("NetworkModule", "Received 401 Unauthorized - token expired and refresh failed")
+                        clearAuthentication()
+                        onAuthenticationFailure?.invoke()
+                    }
+                }
+
                 response
             }
             // Retry with simple exponential backoff for idempotent requests and 429/5xx
@@ -218,6 +244,24 @@ object NetworkModule {
 
         musicApi = retrofit?.create(MusicApi::class.java)
         scrobbleApi = retrofit?.create(ScrobbleApi::class.java)
+    }
+
+    private fun attemptTokenRefresh(): Boolean {
+        synchronized(refreshLock) {
+            if (refreshToken.isEmpty() || retrofit == null) return false
+            return try {
+                val api = retrofit!!.create(MusicApi::class.java)
+                val refreshResponse = runBlocking {
+                    api.refresh(RefreshRequest(refreshToken), skipAuthHeader = true)
+                }
+                setTokens(refreshResponse.token, refreshResponse.refreshToken)
+                onTokenUpdated?.invoke(refreshResponse.token, refreshResponse.refreshToken)
+                true
+            } catch (e: Exception) {
+                Log.e("NetworkModule", "Token refresh failed", e)
+                false
+            }
+        }
     }
 
     fun getMusicApi(): MusicApi {

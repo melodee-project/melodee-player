@@ -25,6 +25,12 @@ class AuthenticationManager(private val context: Context) {
         NetworkModule.setAuthenticationFailureCallback {
             handleAuthenticationFailure()
         }
+
+        // Persist refreshed tokens when NetworkModule updates them
+        NetworkModule.setTokenUpdateCallback { token, refresh ->
+            settingsManager.authToken = token
+            settingsManager.refreshToken = refresh
+        }
     }
     
     private fun checkExistingAuthentication() {
@@ -65,8 +71,8 @@ class AuthenticationManager(private val context: Context) {
             Log.d("AuthenticationManager", "Setting NetworkModule base URL: ${settingsManager.serverUrl}")
             NetworkModule.setBaseUrl(settingsManager.serverUrl)
             
-            Log.d("AuthenticationManager", "Setting NetworkModule auth token")
-            NetworkModule.setAuthToken(settingsManager.authToken)
+            Log.d("AuthenticationManager", "Setting NetworkModule auth/refresh tokens")
+            NetworkModule.setTokens(settingsManager.authToken, settingsManager.refreshToken)
             
             // Verify NetworkModule state
             val networkAuthenticated = NetworkModule.isAuthenticated()
@@ -91,17 +97,29 @@ class AuthenticationManager(private val context: Context) {
         userEmail: String,
         username: String,
         serverUrl: String,
+        refreshToken: String = "",
+        refreshTokenExpiresAt: String = "",
         thumbnailUrl: String = "",
         imageUrl: String = ""
     ) {
         Log.d("AuthenticationManager", "Saving authentication for user: $username")
         
         // Save to persistent storage
-        settingsManager.saveAuthenticationData(token, userId, userEmail, username, serverUrl, thumbnailUrl, imageUrl)
+        settingsManager.saveAuthenticationData(
+            token,
+            userId,
+            userEmail,
+            username,
+            serverUrl,
+            refreshToken,
+            refreshTokenExpiresAt,
+            thumbnailUrl,
+            imageUrl
+        )
         
         // Update NetworkModule
         NetworkModule.setBaseUrl(serverUrl)
-        NetworkModule.setAuthToken(token)
+        NetworkModule.setTokens(token, refreshToken)
         
         // Update state
         _isAuthenticated.value = true

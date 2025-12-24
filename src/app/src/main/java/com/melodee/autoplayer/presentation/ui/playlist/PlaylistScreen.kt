@@ -1,3 +1,5 @@
+@file:Suppress("UNNECESSARY_SAFE_CALL")
+
 package com.melodee.autoplayer.presentation.ui.playlist
 
 import androidx.compose.foundation.clickable

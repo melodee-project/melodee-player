@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                         playlistViewModel = playlistViewModel,
                         nowPlayingViewModel = nowPlayingViewModel,
                         themeManager = themeManager,
-                        onLoginSuccess = { authResponse ->
+                        onLoginSuccess = { _ ->
                             // Reinitialize scrobble manager with user information
                             if (bound && musicService != null) {
                                 musicService?.reinitializeScrobbleManager()

@@ -10,6 +10,7 @@ class MediaSessionManager(private val context: Context) {
     
     private var mediaSession: MediaSessionCompat? = null
     
+    @Suppress("DEPRECATION")
     fun createMediaSession(): MediaSessionCompat {
         return MediaSessionCompat(context, "MelodeeAutoPlayer").also {
             mediaSession = it

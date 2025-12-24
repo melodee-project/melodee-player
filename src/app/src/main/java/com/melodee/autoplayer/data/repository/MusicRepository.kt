@@ -10,6 +10,7 @@ import com.melodee.autoplayer.domain.model.AuthResponse
 import com.melodee.autoplayer.domain.model.LoginModel
 import com.melodee.autoplayer.domain.model.PaginatedResponse
 import com.melodee.autoplayer.domain.model.Playlist
+import com.melodee.autoplayer.domain.model.ServerInfo
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.User
 import kotlinx.coroutines.flow.Flow
@@ -27,7 +28,32 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
     
     private val deduplicator = RequestDeduplicator.getInstance()
 
+    suspend fun getSystemInfo(): ServerInfo {
+        return ErrorHandler.handleOperation(context, "getSystemInfo", "MusicRepository") {
+            api.getSystemInfo()
+        }
+    }
+
+    suspend fun validateServerVersion(): Boolean {
+        return try {
+            val serverInfo = getSystemInfo()
+            if (!serverInfo.isCompatibleVersion()) {
+                throw IllegalStateException(
+                    "Server API version ${serverInfo.getVersionString()} is not compatible. " +
+                    "Minimum required version is 1.2.0"
+                )
+            }
+            true
+        } catch (e: IllegalStateException) {
+            throw e
+        } catch (e: Exception) {
+            throw Exception("Failed to validate server version: ${e.message}", e)
+        }
+    }
+
     fun login(emailOrUsername: String, password: String): Flow<AuthResponse> = flow {
+        validateServerVersion()
+        
         val response = ErrorHandler.handleOperation(context, "login", "MusicRepository") {
             val loginModel = if (emailOrUsername.contains("@")) {
                 LoginModel(email = emailOrUsername, password = password)
@@ -35,7 +61,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
                 LoginModel(userName = emailOrUsername, password = password)
             }
             val response = api.login(loginModel)
-            NetworkModule.setAuthToken(response.token)
+            NetworkModule.setTokens(response.token, response.refreshToken)
             response
         }
         emit(response)

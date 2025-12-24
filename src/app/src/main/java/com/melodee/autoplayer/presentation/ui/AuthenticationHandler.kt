@@ -10,6 +10,7 @@ import android.util.Log
 /**
  * Composable that handles authentication-based navigation
  */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun AuthenticationHandler(
     navController: NavHostController,
