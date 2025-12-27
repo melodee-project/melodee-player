@@ -102,7 +102,7 @@ data class Song(
     val playCount: Int = 0,
     val createdAt: String = "",
     val updatedAt: String = "",
-    val genre: String = ""
+    val genre: String? = null
 ) : Parcelable {
     constructor(parcel: Parcel) : this(
         id = parcel.readUuidString(),
@@ -121,7 +121,7 @@ data class Song(
         playCount = parcel.readInt(),
         createdAt = parcel.readStringOrEmpty(),
         updatedAt = parcel.readStringOrEmpty(),
-        genre = parcel.readStringOrEmpty()
+        genre = parcel.readString()
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -303,10 +303,23 @@ data class ServerInfo(
     val patchVersion: Int = 0,
     val version: String? = null
 ) {
+    /**
+     * Checks if the server API version is compatible with this client.
+     * Minimum required version: 1.2.0
+     * Compatible versions: 1.2.0, 1.2.5, 1.7.8, 2.0.0, 8.3.0, etc.
+     * Incompatible versions: 1.1.9, 1.0.0, 0.9.5, etc.
+     */
     fun isCompatibleVersion(): Boolean {
+        // Required minimum version is 1.2.0
+        val requiredMajor = 1
+        val requiredMinor = 2
+        
         return when {
-            majorVersion > 1 -> true
-            majorVersion == 1 && minorVersion >= 2 -> true
+            // Any major version above 1 is compatible (2.x.x, 3.x.x, etc.)
+            majorVersion > requiredMajor -> true
+            // For major version 1, require minor version 2 or higher (1.2.x, 1.3.x, etc.)
+            majorVersion == requiredMajor && minorVersion >= requiredMinor -> true
+            // All other versions (1.0.x, 1.1.x, 0.x.x) are incompatible
             else -> false
         }
     }

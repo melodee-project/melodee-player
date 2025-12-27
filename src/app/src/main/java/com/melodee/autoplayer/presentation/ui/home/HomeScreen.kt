@@ -205,11 +205,12 @@ fun HomeScreen(
     }
 
     Scaffold(
-    ) { _ ->
+    ) { paddingValues ->
         // Mobile layout
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(paddingValues)
                     .padding(horizontal = 16.dp, vertical = 16.dp)
             ) {
                 // User header

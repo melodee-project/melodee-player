@@ -1,6 +1,7 @@
 package com.melodee.autoplayer.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.melodee.autoplayer.R
 import com.melodee.autoplayer.data.api.MusicApi
 import com.melodee.autoplayer.data.api.NetworkModule
@@ -143,9 +144,13 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
 
     suspend fun favoriteSong(songId: String, userStarred: Boolean): Boolean {
         return try {
+            Log.d("MusicRepository", "favoriteSong API call: songId=$songId, userStarred=$userStarred")
             val response = api.favoriteSong(songId, userStarred)
-            response.isSuccessful
+            val success = response.isSuccessful
+            Log.d("MusicRepository", "favoriteSong API response: code=${response.code()}, isSuccessful=$success")
+            success
         } catch (e: Exception) {
+            Log.e("MusicRepository", "favoriteSong exception: ${e.message}", e)
             false
         }
     }

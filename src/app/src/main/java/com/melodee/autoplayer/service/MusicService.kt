@@ -1,5 +1,6 @@
 package com.melodee.autoplayer.service
 
+import androidx.media3.common.util.UnstableApi
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -106,7 +107,8 @@ class MusicService : MediaBrowserServiceCompat() {
     inner class MusicBinder : Binder() {
         fun getService(): MusicService = this@MusicService
     }
-
+    
+    @UnstableApi
     override fun onCreate() {
         super.onCreate()
         Log.d("MusicService", "MusicService onCreate called")
@@ -719,7 +721,12 @@ class MusicService : MediaBrowserServiceCompat() {
         
         when (intent?.action) {
             ACTION_PLAY_SONG -> {
-                val song = intent.getParcelableExtra(EXTRA_SONG, Song::class.java)
+                val song = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(EXTRA_SONG, Song::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(EXTRA_SONG)
+                }
                 Log.d("MusicService", "Received play command for song: ${song?.title}")
                 if (song != null) {
                     // Set context to single song if no queue is set
@@ -738,7 +745,12 @@ class MusicService : MediaBrowserServiceCompat() {
                 }
             }
             ACTION_SET_PLAYLIST -> {
-                val songs = intent.getParcelableArrayListExtra(EXTRA_PLAYLIST, Song::class.java)
+                val songs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(EXTRA_PLAYLIST, Song::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra(EXTRA_PLAYLIST)
+                }
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
                 // Capture playlist pagination context if provided
                 remotePlaylistId = intent.getStringExtra("PLAYLIST_ID")
@@ -760,7 +772,12 @@ class MusicService : MediaBrowserServiceCompat() {
                 }
             }
             ACTION_SET_SEARCH_RESULTS -> {
-                val songs = intent.getParcelableArrayListExtra(EXTRA_SEARCH_RESULTS, Song::class.java)
+                val songs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(EXTRA_SEARCH_RESULTS, Song::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra(EXTRA_SEARCH_RESULTS)
+                }
                 val startIndex = intent.getIntExtra("START_INDEX", 0)
                 if (songs != null) {
                     // Context set by playbackManager.setQueue call
@@ -828,7 +845,8 @@ class MusicService : MediaBrowserServiceCompat() {
             binder
         }
     }
-
+    
+    @UnstableApi
     override fun onDestroy() {
         Log.d("MusicService", "onDestroy called")
         
@@ -1037,6 +1055,8 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
+    
+    @UnstableApi
     private fun setupPlayer() {
         Log.d("MusicService", "Setting up ExoPlayer via MusicPlaybackManager")
         
@@ -1322,6 +1342,8 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.d("MusicService", "Stopped foreground service and removed notification")
     }
 
+    
+    @UnstableApi
     private fun prefetchUpcoming(count: Int = 2) {
         prefetchJob?.cancel()
         prefetchJob = serviceScope.launch(Dispatchers.IO) {

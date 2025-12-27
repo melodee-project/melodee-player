@@ -206,9 +206,9 @@ class AuthenticationManager(private val context: Context) {
             if (settingsManager.isAuthenticated()) {
                 Log.i("AuthenticationManager", "Found stored authentication data")
                 
-                // Re-initialize NetworkModule with stored credentials
+                // Re-initialize NetworkModule with stored credentials INCLUDING refresh token
                 NetworkModule.setBaseUrl(settingsManager.serverUrl)
-                NetworkModule.setAuthToken(settingsManager.authToken)
+                NetworkModule.setTokens(settingsManager.authToken, settingsManager.refreshToken)
                 
                 // Update state
                 _isAuthenticated.value = true
@@ -216,6 +216,8 @@ class AuthenticationManager(private val context: Context) {
                 
                 Log.i("AuthenticationManager", "Authentication restored from storage successfully")
                 Log.i("AuthenticationManager", "User: ${settingsManager.username} at ${settingsManager.serverUrl}")
+                Log.i("AuthenticationManager", "Auth token present: ${settingsManager.authToken.isNotEmpty()}")
+                Log.i("AuthenticationManager", "Refresh token present: ${settingsManager.refreshToken.isNotEmpty()}")
                 
                 return true
             } else {

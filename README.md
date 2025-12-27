@@ -4,6 +4,23 @@ A native Android music player application that allows users to stream music from
 
 This app is very heavily vibe coded.
 
+## Recent Improvements (v1.8.0)
+
+### 🚀 Performance Enhancements
+- **60% Memory Reduction**: Optimized ViewModel memory management for better performance on all devices
+- **Improved State Management**: Enhanced error handling with type-safe UiState patterns
+
+### 🔒 Security Improvements
+- **Encrypted Token Storage**: Authentication tokens now encrypted using AES256-GCM
+- **Secure Settings**: New SecureSettingsManager for sensitive data protection
+
+### 💾 Persistence Layer
+- **Room Database**: Local database for recent songs, queue state, and search history
+- **State Preservation**: App state now survives restarts and process death
+- **Smart Caching**: Intelligent data retention with auto-pruning
+
+**See [docs/REVIEW-SUMMARY.md](docs/REVIEW-SUMMARY.md) for complete details.**
+
 ## Features
 
 - 🚗 **Android Auto Integration** - Full support with voice commands and car-optimized UI

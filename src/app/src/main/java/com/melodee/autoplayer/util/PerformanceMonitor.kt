@@ -53,10 +53,18 @@ class PerformanceMonitor(private val context: Context) {
                     
                     // Track peak usage
                     val currentUsed = (stats.usedMemoryMB * 1024 * 1024).toLong()
-                    maxMemoryUsed.updateAndGet { current -> maxOf(current, currentUsed) }
+                    synchronized(maxMemoryUsed) {
+                        if (currentUsed > maxMemoryUsed.get()) {
+                            maxMemoryUsed.set(currentUsed)
+                        }
+                    }
                     
                     val currentHeap = (stats.heapUsedMB * 1024 * 1024).toLong()
-                    peakHeapSize.updateAndGet { current -> maxOf(current, currentHeap) }
+                    synchronized(peakHeapSize) {
+                        if (currentHeap > peakHeapSize.get()) {
+                            peakHeapSize.set(currentHeap)
+                        }
+                    }
                     
                     // Log memory stats
                     Logger.logPerformance("PerformanceMonitor", "Memory", "%.1f MB".format(stats.usedMemoryMB))

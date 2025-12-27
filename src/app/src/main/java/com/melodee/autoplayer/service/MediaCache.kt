@@ -1,5 +1,6 @@
 package com.melodee.autoplayer.service
 
+import androidx.media3.common.util.UnstableApi
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -19,6 +20,7 @@ import kotlinx.coroutines.CancellationException
 
 import java.io.File
 
+@UnstableApi
 object MediaCache {
     private const val TAG = "MediaCache"
     private const val CACHE_FOLDER = "media_cache"

@@ -1,5 +1,6 @@
 package com.melodee.autoplayer.service
 
+import androidx.media3.common.util.UnstableApi
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -67,6 +68,7 @@ class MusicPlaybackManager(private val context: Context) {
     private var shuffledIndices: List<Int> = emptyList()
     private var currentShuffleIndex = -1
     
+    @UnstableApi
     fun initializePlayer(): ExoPlayer {
         if (exoPlayer == null) {
             val mediaSourceFactory = MediaCache.mediaSourceFactory(context)

@@ -56,10 +56,11 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setContext(context: Context) {
-        this.context = context
-        // Bind to MusicService
-        Intent(context, MusicService::class.java).also { intent ->
-            context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        // Store application context to prevent memory leaks
+        this.context = context.applicationContext
+        // Bind to MusicService using Application context
+        Intent(this.context, MusicService::class.java).also { intent ->
+            this.context!!.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }
     }
     
@@ -111,19 +112,11 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     private var isRefreshing = false
     private var autoPlayAfterRefresh = false
 
-    companion object {
-        private const val MAX_SONGS_IN_MEMORY = 500
-        private const val KEEP_SONGS_ON_CLEANUP = 300
-    }
-
     private fun applyVirtualScrolling(current: List<Song>, incoming: List<Song>, isFirstPage: Boolean): List<Song> {
         return if (isFirstPage) {
             incoming
         } else {
-            val combined = current + incoming
-            if (combined.size > MAX_SONGS_IN_MEMORY) {
-                combined.takeLast(KEEP_SONGS_ON_CLEANUP) + incoming
-            } else combined
+            current + incoming
         }
     }
 
@@ -228,7 +221,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         super.onCleared()
         stopProgressUpdates()
         if (bound) {
-            context?.unbindService(connection)
+            getApplication<Application>().unbindService(connection)
             bound = false
         }
     }
@@ -379,7 +372,9 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     fun favoriteSong(song: Song, newStarredValue: Boolean) {
         viewModelScope.launch {
             try {
+                Log.d("PlaylistViewModel", "favoriteSong called: songId=${song.id}, newStarredValue=$newStarredValue")
                 val success = repository?.favoriteSong(song.id.toString(), newStarredValue) ?: false
+                Log.d("PlaylistViewModel", "favoriteSong API result: success=$success")
                 
                 if (success) {
                     // Update the song in the current list
@@ -391,6 +386,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
                     _songs.value = updatedSongs
+                    Log.d("PlaylistViewModel", "Updated song list, new size: ${updatedSongs.size}")
                     
                     // Refresh the current playlist since favorite status changes may affect playlist details
                     currentPlaylistId?.let { playlistId ->
@@ -403,15 +399,18 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                     // Show success toast
                     context?.let { ctx ->
                         val message = if (newStarredValue) "Favorited Song" else "Un-favorited Song"
+                        Log.d("PlaylistViewModel", "Showing success toast: $message")
                         android.widget.Toast.makeText(ctx, message, android.widget.Toast.LENGTH_SHORT).show()
-                    }
+                    } ?: Log.e("PlaylistViewModel", "Context is null, cannot show toast")
                 } else {
+                    Log.e("PlaylistViewModel", "favoriteSong failed: success=$success")
                     // Show error toast
                     context?.let { ctx ->
                         android.widget.Toast.makeText(ctx, "Doh! Unable to change songs favorite status", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
+                Log.e("PlaylistViewModel", "favoriteSong exception: ${e.message}", e)
                 // Show error toast
                 context?.let { ctx ->
                     android.widget.Toast.makeText(ctx, "Doh! Unable to change songs favorite status", android.widget.Toast.LENGTH_SHORT).show()

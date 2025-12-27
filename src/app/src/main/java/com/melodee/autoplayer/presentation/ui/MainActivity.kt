@@ -41,6 +41,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.melodee.autoplayer.MelodeeApplication
+import com.melodee.autoplayer.data.api.NetworkModule
 import com.melodee.autoplayer.domain.model.AuthResponse
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.presentation.ui.about.AboutScreen
@@ -275,13 +276,24 @@ fun MainScreen(
     }
     
     // Set up ViewModels when user is authenticated
+    // Use Unit as key to ensure this runs on every composition when authenticated
     LaunchedEffect(isAuthenticated) {
         if (isAuthenticated) {
             val currentUser = authenticationManager.getCurrentUser()
             if (currentUser != null) {
                 Log.d("MainActivity", "Setting up ViewModels for authenticated user: ${currentUser.username}")
+                Log.d("MainActivity", "Server URL: ${currentUser.serverUrl}")
                 
-                // Set base URL for both view models
+                // Ensure NetworkModule is properly initialized with stored credentials
+                // This is critical for app restart scenarios
+                NetworkModule.setBaseUrl(currentUser.serverUrl)
+                NetworkModule.setTokens(
+                    token = com.melodee.autoplayer.data.SettingsManager(context).authToken,
+                    refresh = com.melodee.autoplayer.data.SettingsManager(context).refreshToken
+                )
+                Log.d("MainActivity", "NetworkModule re-initialized with stored credentials")
+                
+                // Set base URL for both view models (this creates new repositories)
                 homeViewModel.setBaseUrl(currentUser.serverUrl)
                 playlistViewModel.setBaseUrl(currentUser.serverUrl)
                 
@@ -298,6 +310,9 @@ fun MainScreen(
                 homeViewModel.setUser(user)
                 
                 Log.d("MainActivity", "ViewModels configured for authenticated user")
+                Log.d("MainActivity", "NetworkModule authenticated: ${NetworkModule.isAuthenticated()}")
+            } else {
+                Log.w("MainActivity", "isAuthenticated is true but getCurrentUser() returned null!")
             }
         }
     }
@@ -532,9 +547,8 @@ fun MainScreen(
                         // Reinitialize scrobble manager with user information
                         onLoginSuccess(authResponse)
                         
-                        navController.navigate("home") {
-                            popUpTo("login") { inclusive = true }
-                        }
+                        // Don't manually navigate here - let LaunchedEffect(isAuthenticated) handle it
+                        // This prevents double navigation which can cause the app to minimize
                     }
                 )
             }

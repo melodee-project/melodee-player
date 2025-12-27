@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "383552710296",
+    "project_id": "melodee-player",
+    "storage_bucket": "melodee-player.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:383552710296:android:5f92474206d206554fd2ed",
+        "android_client_info": {
+          "package_name": "com.melodee.autoplayer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYzDFkyflkE9HDhQ4F7Oe7qQpx3Qs8Q54"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:383552710296:android:c0f41e6967e7ebf74fd2ed",
+        "android_client_info": {
+          "package_name": "com.sschmitt.melodee_player"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYzDFkyflkE9HDhQ4F7Oe7qQpx3Qs8Q54"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

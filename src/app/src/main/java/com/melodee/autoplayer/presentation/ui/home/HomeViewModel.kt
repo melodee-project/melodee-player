@@ -27,7 +27,6 @@ import java.util.ArrayList
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var repository: MusicRepository? = null
-    private var context: Context? = null
     private var musicService: MusicService? = null
     private var bound = false
     private var searchJob: Job? = null
@@ -35,8 +34,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var didAttemptUserRefresh = false
     
     companion object {
-        private const val MAX_SONGS_IN_MEMORY = 500
-        private const val KEEP_SONGS_ON_CLEANUP = 300
+        private const val MAX_SONGS_IN_MEMORY = 150
+        private const val KEEP_SONGS_ON_CLEANUP = 75
     }
     
     private fun updateSongsWithVirtualScrolling(newSongs: List<Song>, isFirstPage: Boolean): List<Song> {
@@ -336,13 +335,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setContext(context: Context) {
-        this.context = context
+        val appContext = context.applicationContext
         // Initialize performance monitoring
-        performanceMonitor = PerformanceMonitor.getInstance(context)
+        performanceMonitor = PerformanceMonitor.getInstance(appContext)
         performanceMonitor?.startMonitoring()
         // Bind to MusicService
-        Intent(context, MusicService::class.java).also { intent ->
-            context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        Intent(appContext, MusicService::class.java).also { intent ->
+            appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }
     }
 
@@ -386,7 +385,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         stopProgressUpdates()
         performanceMonitor?.stopMonitoring()
         if (bound) {
-            context?.unbindService(connection)
+            getApplication<Application>().unbindService(connection)
             bound = false
         }
     }
@@ -421,8 +420,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPlaylists() {
         Log.d("HomeViewModel", "Loading playlists, page: $currentPage, hasMore: $hasMorePlaylists")
-        if (!hasMorePlaylists || repository == null) {
-            Log.d("HomeViewModel", "Skipping playlist load: hasMore=$hasMorePlaylists, repository=${repository != null}")
+        if (!hasMorePlaylists || repository == null || _isLoading.value) {
+            Log.d("HomeViewModel", "Skipping playlist load: hasMore=$hasMorePlaylists, repository=${repository != null}, isLoading=${_isLoading.value}")
             return
         }
         
@@ -467,12 +466,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         
         // Stop playback if playing
         if (_isPlaying.value) {
-            context?.let { ctx ->
-                val intent = Intent(ctx, MusicService::class.java).apply {
-                    action = MusicService.ACTION_STOP
-                }
-                ctx.startService(intent)
+            val ctx = getApplication<Application>()
+            val intent = Intent(ctx, MusicService::class.java).apply {
+                action = MusicService.ACTION_STOP
             }
+            ctx.startService(intent)
             _isPlaying.value = false
         }
         
@@ -575,31 +573,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             
             Log.d("HomeViewModel", "State after setting - currentSongIndex: ${_currentSongIndex.value}, isPlaying: ${_isPlaying.value}")
             
-            context?.let { ctx ->
-                // If we have search results, set them as the queue with search context
-                if (songs.value.isNotEmpty() && _searchQuery.value.isNotBlank()) {
-                    Log.d("HomeViewModel", "Sending ACTION_SET_SEARCH_RESULTS to service")
-                    val intent = Intent(ctx, MusicService::class.java).apply {
-                        action = MusicService.ACTION_SET_SEARCH_RESULTS
-                        putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(songs.value))
-                        putExtra("START_INDEX", index)
-                    }
-                    ctx.startService(intent)
-                } else {
-                    Log.d("HomeViewModel", "Sending ACTION_PLAY_SONG to service (single song)")
-                    // Single song playback
-                    val intent = Intent(ctx, MusicService::class.java).apply {
-                        action = MusicService.ACTION_PLAY_SONG
-                        putExtra(MusicService.EXTRA_SONG, song)
-                    }
-                    ctx.startService(intent)
+            val ctx = getApplication<Application>()
+            // If we have search results, set them as the queue with search context
+            if (songs.value.isNotEmpty() && _searchQuery.value.isNotBlank()) {
+                Log.d("HomeViewModel", "Sending ACTION_SET_SEARCH_RESULTS to service")
+                val intent = Intent(ctx, MusicService::class.java).apply {
+                    action = MusicService.ACTION_SET_SEARCH_RESULTS
+                    putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(songs.value))
+                    putExtra("START_INDEX", index)
                 }
-                
-                // Ensure progress updates start (will work immediately if bound, or later when service connects)
-                ensureProgressUpdatesStarted()
-                
-                // Add a verification mechanism to ensure state is correct after a short delay
-                viewModelScope.launch {
+                ctx.startService(intent)
+            } else {
+                Log.d("HomeViewModel", "Sending ACTION_PLAY_SONG to service (single song)")
+                // Single song playback
+                val intent = Intent(ctx, MusicService::class.java).apply {
+                    action = MusicService.ACTION_PLAY_SONG
+                    putExtra(MusicService.EXTRA_SONG, song)
+                }
+                ctx.startService(intent)
+            }
+            
+            // Ensure progress updates start (will work immediately if bound, or later when service connects)
+            ensureProgressUpdatesStarted()
+            
+            // Add a verification mechanism to ensure state is correct after a short delay
+            viewModelScope.launch {
                     delay(1000) // Wait 1 second for service to process
                     
                     // Verify that our state is still correct
@@ -631,9 +629,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         ensureProgressUpdatesStarted()
                     }
                 }
-            } ?: run {
-                Log.e("HomeViewModel", "Context is null, cannot start service")
-            }
         } else {
             Log.e("HomeViewModel", "Song not found in search results!")
         }
@@ -642,37 +637,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePlayPause() {
         _isPlaying.value = !_isPlaying.value
-        context?.let { ctx ->
-            val intent = Intent(ctx, MusicService::class.java).apply {
-                action = if (_isPlaying.value) {
-                    MusicService.ACTION_RESUME
-                } else {
-                    MusicService.ACTION_PAUSE
-                }
+        val ctx = getApplication<Application>()
+        val intent = Intent(ctx, MusicService::class.java).apply {
+            action = if (_isPlaying.value) {
+                MusicService.ACTION_RESUME
+            } else {
+                MusicService.ACTION_PAUSE
             }
-            ctx.startService(intent)
         }
+        ctx.startService(intent)
     }
 
     fun seekTo(position: Long) {
-        context?.let { ctx ->
-            val intent = Intent(ctx, MusicService::class.java).apply {
-                action = MusicService.ACTION_SEEK_TO
-                putExtra(MusicService.EXTRA_POSITION, position)
-            }
-            ctx.startService(intent)
+        val ctx = getApplication<Application>()
+        val intent = Intent(ctx, MusicService::class.java).apply {
+            action = MusicService.ACTION_SEEK_TO
+            putExtra(MusicService.EXTRA_POSITION, position)
         }
+        ctx.startService(intent)
     }
 
     fun logout() {
         // Stop any playing music
         if (_isPlaying.value) {
-            context?.let { ctx ->
-                val intent = Intent(ctx, MusicService::class.java).apply {
-                    action = MusicService.ACTION_STOP
-                }
-                ctx.startService(intent)
+            val ctx = getApplication<Application>()
+            val intent = Intent(ctx, MusicService::class.java).apply {
+                action = MusicService.ACTION_STOP
             }
+            ctx.startService(intent)
         }
         
         // Clear all data
@@ -731,7 +723,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun favoriteSong(song: Song, newStarredValue: Boolean) {
         viewModelScope.launch {
             try {
+                Log.d("HomeViewModel", "favoriteSong called: songId=${song.id}, newStarredValue=$newStarredValue")
                 val success = repository?.favoriteSong(song.id.toString(), newStarredValue) ?: false
+                Log.d("HomeViewModel", "favoriteSong API result: success=$success")
                 
                 if (success) {
                     // Update the song in the current list
@@ -743,38 +737,38 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     _songs.value = updatedSongs
+                    Log.d("HomeViewModel", "Updated song list, new size: ${updatedSongs.size}")
                     
                     // Refresh playlists since favorite status changes may affect playlist details
                     refreshPlaylists()
                     
                     // Show success toast
-                    context?.let { ctx ->
-                        val message = if (newStarredValue) "Favorited Song" else "Un-favorited Song"
-                        android.widget.Toast.makeText(ctx, message, android.widget.Toast.LENGTH_SHORT).show()
-                    }
+                    val ctx = getApplication<Application>()
+                    val message = if (newStarredValue) "Favorited Song" else "Un-favorited Song"
+                    Log.d("HomeViewModel", "Showing success toast: $message")
+                    android.widget.Toast.makeText(ctx, message, android.widget.Toast.LENGTH_SHORT).show()
                 } else {
+                    Log.e("HomeViewModel", "favoriteSong failed: success=$success")
                     // Show error toast
-                    context?.let { ctx ->
-                        android.widget.Toast.makeText(ctx, "Doh! Unable to change songs favorite status", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } catch (e: Exception) {
-                // Show error toast
-                context?.let { ctx ->
+                    val ctx = getApplication<Application>()
                     android.widget.Toast.makeText(ctx, "Doh! Unable to change songs favorite status", android.widget.Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "favoriteSong exception: ${e.message}", e)
+                // Show error toast
+                val ctx = getApplication<Application>()
+                android.widget.Toast.makeText(ctx, "Doh! Unable to change songs favorite status", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     fun clearQueue() {
         Log.d("HomeViewModel", "Clearing queue")
-        context?.let { ctx ->
-            val intent = Intent(ctx, MusicService::class.java).apply {
-                action = MusicService.ACTION_CLEAR_QUEUE
-            }
-            ctx.startService(intent)
+        val ctx = getApplication<Application>()
+        val intent = Intent(ctx, MusicService::class.java).apply {
+            action = MusicService.ACTION_CLEAR_QUEUE
         }
+        ctx.startService(intent)
         
         // Clear local playback state
         _currentSongIndex.value = -1
@@ -939,15 +933,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             _isPlaying.value = true
                             _currentPlayingSong.value = albumSongs.first()
                             
-                            context?.let { ctx ->
-                                Log.d("HomeViewModel", "Playing album: ${album.name} with ${albumSongs.size} songs")
-                                val intent = Intent(ctx, MusicService::class.java).apply {
-                                    action = MusicService.ACTION_SET_SEARCH_RESULTS
-                                    putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(albumSongs))
-                                    putExtra("START_INDEX", 0)
-                                }
-                                ctx.startService(intent)
+                            val ctx = getApplication<Application>()
+                            Log.d("HomeViewModel", "Playing album: ${album.name} with ${albumSongs.size} songs")
+                            val intent = Intent(ctx, MusicService::class.java).apply {
+                                action = MusicService.ACTION_SET_SEARCH_RESULTS
+                                putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(albumSongs))
+                                putExtra("START_INDEX", 0)
                             }
+                            ctx.startService(intent)
                         }
                     }
             } catch (e: Exception) {
