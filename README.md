@@ -1,275 +1,112 @@
-# Melodee Android Auto Player
+<div align="center">
+  <img src="graphics/logo.png" alt="Melodee logo" height="120" />
 
-A native Android music player application that allows users to stream music from Melodee servers. The application is built using modern Android development practices with Jetpack Compose and supports Android Auto integration for in-car entertainment.
+  # Melodee Android Auto Player
+  Native Android + Android Auto client for the Melodee self-hosted music server, built with Jetpack Compose and Media3.
 
-This app is very heavily vibe coded.
+  [![Android CI](https://github.com/melodee-project/melodee-player/actions/workflows/android.yml/badge.svg)](https://github.com/melodee-project/melodee-player/actions/workflows/android.yml)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  ![minSdk](https://img.shields.io/badge/minSdk-21-blue)
+  ![targetSdk](https://img.shields.io/badge/targetSdk-35-blue)
 
-## Recent Improvements (v1.8.0)
+  Features | Quick Start | Android Auto | Architecture | Testing | Documentation | Contributing
+</div>
 
-### 🚀 Performance Enhancements
-- **60% Memory Reduction**: Optimized ViewModel memory management for better performance on all devices
-- **Improved State Management**: Enhanced error handling with type-safe UiState patterns
+## Overview
 
-### 🔒 Security Improvements
-- **Encrypted Token Storage**: Authentication tokens now encrypted using AES256-GCM
-- **Secure Settings**: New SecureSettingsManager for sensitive data protection
-
-### 💾 Persistence Layer
-- **Room Database**: Local database for recent songs, queue state, and search history
-- **State Preservation**: App state now survives restarts and process death
-- **Smart Caching**: Intelligent data retention with auto-pruning
-
-**See [docs/REVIEW-SUMMARY.md](docs/REVIEW-SUMMARY.md) for complete details.**
+Melodee Player is a Kotlin/Compose app (version 1.7.1, minSdk 21 / targetSdk 35) that streams music from a Melodee server to phones and Android Auto. It ships with a background MediaBrowserService for car interfaces, a Compose UI for handheld use, and a Media3-based playback stack with caching and scrobbling.
 
 ## Features
 
-- 🚗 **Android Auto Integration** - Full support with voice commands and car-optimized UI
-- 🎵 **Modern UI** - Built with Jetpack Compose and Material Design 3
-- 🏗️ **Clean Architecture** - MVVM pattern with Clean Architecture principles
-- 🌐 **Efficient Networking** - Retrofit with OkHttp for reliable API communication
-- 🎧 **Media3 Playback** - Advanced media playback with ExoPlayer
-- 📱 **Playlist Management** - Browse and manage playlists with infinite scrolling
-- 🔍 **Search Functionality** - Search for songs and playlists
-- 🔐 **User Authentication** - Secure login with configurable server endpoints
-- 🔄 **Pull-to-Refresh** - Refresh content with intuitive gestures
-- 🎮 **Playback Controls** - Persistent now playing bar with full media controls
+- Android Auto ready: MediaBrowserServiceCompat + MediaSession with browse/search, metadata, steering wheel controls, and voice-triggered playback.
+- Rich browse/search: playlists, songs, artists, and albums with pagination, infinite scroll, artist/album drill-ins, and server-side favorites.
+- Playback service: Media3/ExoPlayer with queue control, shuffle/repeat, prefetching, notification controls, and streaming cache.
+- Resilient networking: login and token refresh against a Melodee API, request deduplication, retry/backoff, normalized server URLs, and scrobble reporting.
+- Compose UI: Material 3 theming (light/dark/dynamic), now playing screen + mini player, playlist view, and artist/album galleries with Coil-powered artwork.
+- Performance and diagnostics: macrobenchmarks, unit/UI tests, optional performance monitor hooks, and detailed logging for Android Auto interactions.
 
-## Project Structure
+## Quick Start
 
-```
-src/
-├── build.gradle.kts              # Root project configuration (Kotlin DSL)
-├── settings.gradle.kts           # Project settings (Kotlin DSL)
-├── app/
-│   ├── build.gradle.kts          # App module configuration (Kotlin DSL)
-│   └── src/main/java/com/melodee/autoplayer/
-│       ├── data/                 # Data layer (API, repositories)
-│       ├── domain/               # Domain layer (models, use cases)
-│       ├── presentation/         # Presentation layer (ViewModels, UI)
-│       ├── service/              # Background services (media, scrobbling)
-│       ├── ui/                   # UI components and themes
-│       ├── util/                 # Utility classes
-│       └── MelodeeApplication.kt # Application class
-├── gradlew                       # Gradle wrapper (Unix)
-├── gradlew.bat                   # Gradle wrapper (Windows)
-└── gradle/                       # Gradle wrapper configuration
-```
-
-## Architecture
-
-The application follows **Clean Architecture** with **MVVM** pattern:
-
-### 📊 **Data Layer**
-- API interfaces and implementations
-- Repository pattern for data access
-- Network models and DTOs
-- Local caching strategies
-
-### 🎯 **Domain Layer**
-- Business logic and use cases
-- Domain models and entities
-- Repository interfaces
-- Business rules validation
-
-### 🖼️ **Presentation Layer**
-- Jetpack Compose UI components
-- ViewModels with state management
-- Navigation with Navigation Compose
-- UI state handling
-
-### 🔧 **Service Layer**
-- Media playback service
-- Android Auto integration
-- Background processing
-- Scrobbling and analytics
-
-## Setup
-
-### Prerequisites
-- **Android Studio** Hedgehog (2023.1.1) or later
-- **JDK 17** or higher
-- **Android SDK** with API level 35
-- **Git** for version control
-
-### Installation
-1. **Clone the repository**
+1. **Requirements**
+   - Android Studio Hedgehog (2023.1.1)+, JDK 17, Android SDK Platform 35
+   - Device or emulator on API 21+ (Android Auto features require a device or emulator with Android Auto)
+   - A running Melodee API server (use your deployment or the bundled `api-server/`—see its README for setup)
+2. **Clone and open**
    ```bash
-   git clone <repository-url>
-   cd melodee-player
+   git clone https://github.com/melodee-project/melodee-player.git
+   cd melodee-player/src
    ```
-
-2. **Open in Android Studio**
-   - Open Android Studio
-   - Select "Open an existing project"
-   - Navigate to the cloned directory and select the `src` folder
-
-3. **Configure API endpoint**
-   - Launch the application
-   - Enter your Melodee server URL in the login screen
-   - Provide your credentials
-
-4. **Build and run**
+   Open the `src` directory in Android Studio or keep using the CLI.
+3. **Build and run**
    ```bash
-   cd src
-   ./gradlew build
-   ./gradlew installDebug
+   ./gradlew build          # compile and run unit tests
+   ./gradlew installDebug   # deploy to a connected device/emulator
    ```
+4. **Configure the backend**
+   - Launch the app, enter your Melodee server base URL (e.g., `https://your-host/`), and sign in with your account.
+   - The app stores auth tokens locally and will refresh them automatically during playback or search.
+5. **Use it**
+   - Browse playlists/artists/albums, search, start playback, and manage the queue (shuffle/repeat, add/remove, skip/seek).
+   - Connect to Android Auto to browse, search, and control playback hands-free.
 
-## Requirements
+## Android Auto
 
-### Development Environment
-- **Android Studio**: Hedgehog (2023.1.1) or later
-- **JDK**: 17 or higher
-- **Android SDK**: API 21-35
-- **Kotlin**: 1.9.20
-- **Gradle**: 8.12
-- **Android Gradle Plugin**: 8.10.0
+- Browse playlists and the current queue from Android Auto using the MediaBrowser tree.
+- Voice search and playback via Google Assistant; results are cached for quick follow-up commands.
+- Full metadata (art, artist, album) and notification controls; steering wheel buttons map to previous/next/play-pause.
+- Queue mutations (add/clear) stay in sync with the handheld UI.
 
-### Device Requirements
-- **Minimum SDK**: API 21 (Android 5.0)
-- **Target SDK**: API 35 (Android 15)
-- **Architecture**: ARM64, ARM, x86_64
+## Architecture & Stack
 
-## Dependencies
+### Project layout
+- `src/app` — Compose Android app (app module)
+- `src/benchmark` — Macrobenchmark suite for startup/navigation/scroll performance
+- `docs/` — Architecture, reviews, Android Auto specs, performance notes
+- `api-server/` — Melodee backend source for local testing (see `api-server/README.md`)
+- `graphics/` — Branding assets for docs/UI
+- `prompts/` — Prompt artifacts used during development
 
-### Core Android
-- **AndroidX Core KTX**: 1.15.0
-- **AppCompat**: 1.7.0
-- **Material Design**: 1.12.0
+### Tech stack
+- UI: Jetpack Compose, Material 3, Navigation Compose
+- Playback: Media3/ExoPlayer, MediaBrowserServiceCompat, MediaSessionCompat, Media cache/prefetch
+- Networking: Retrofit + OkHttp (logging, retry/backoff, caching), Gson, request deduplication, token refresh handling
+- Data/auth: SharedPreferences-based SettingsManager (encrypted SecureSettingsManager available for migration), URL normalization, scrobble API integration
+- Concurrency: Kotlin Coroutines + Flow
+- Images: Coil (+ GIF support)
+- Testing: JUnit, MockK, Truth, Robolectric, Compose UI tests, AndroidX Test, Macrobenchmark, JaCoCo coverage
 
-### Jetpack Compose
-- **Compose BOM**: 2024.12.01
-- **Activity Compose**: 1.9.3
-- **Navigation Compose**: 2.8.5
-- **Material 3**: Latest
-- **Compiler**: 1.5.4
+## Testing
 
-### Architecture & Lifecycle
-- **Lifecycle Runtime**: 2.8.7
-- **ViewModel**: 2.8.7
-- **ViewModel Compose**: 2.8.7
-- **Runtime Compose**: 2.8.7
+From `src/`:
 
-### Media & Playback
-- **Media3 ExoPlayer**: 1.2.0
-- **Media3 UI**: 1.2.0
-- **Media3 Session**: 1.2.0
-- **AndroidX Media**: 1.7.0 (Android Auto support)
-
-### Networking
-- **Retrofit**: 2.11.0
-- **Gson Converter**: 2.11.0
-- **OkHttp**: 4.12.0
-- **Logging Interceptor**: 4.12.0
-
-### Image Loading
-- **Coil**: 2.7.0
-- **Coil Compose**: 2.7.0
-- **Coil GIF**: 2.7.0
-
-### Concurrency
-- **Kotlin Coroutines**: 1.9.0
-
-### Testing
-- **JUnit**: 4.13.2
-- **AndroidX Test**: 1.2.1
-- **Espresso**: 3.6.1
-- **Compose Testing**: Latest
-
-## Build System
-
-This project uses **Kotlin DSL** for Gradle build scripts, providing:
-- Type-safe build configuration
-- Better IDE support and autocomplete
-- Compile-time error checking
-- Consistent syntax with Kotlin codebase
-
-### Build Commands
 ```bash
-# Clean build
-./gradlew clean
+# Unit tests
+./gradlew testDebugUnitTest
 
-# Debug build
-./gradlew assembleDebug
+# Instrumented/UI tests (requires emulator/device)
+./gradlew connectedDebugAndroidTest
 
-# Release build
-./gradlew assembleRelease
+# Macrobenchmarks (requires emulator/device)
+./gradlew :benchmark:connectedCheck
 
-# Run tests
-./gradlew test
-
-# Install on device
-./gradlew installDebug
+# Coverage report
+./gradlew jacocoTestReport
 ```
 
-## Usage
+CI runs `./gradlew build` and `./gradlew testDebugUnitTest` via GitHub Actions (`android.yml`).
 
-### Getting Started
-1. **Launch** the application
-2. **Configure** your Melodee server URL
-3. **Login** with your credentials
-4. **Browse** available playlists and songs
-5. **Select** content to start playback
-6. **Control** playback using the now playing bar
+## Documentation
 
-### Android Auto
-1. **Connect** your device to Android Auto
-2. **Launch** the Melodee app from the car interface
-3. **Use voice commands** for hands-free control
-4. **Browse** playlists using car-safe UI
-5. **Control playback** with steering wheel controls
-
-### Voice Commands (Android Auto)
-- "Play [song/artist/playlist name]"
-- "Pause music"
-- "Skip to next song"
-- "Go back to previous song"
-- "Shuffle my music"
-
-## Android Auto Integration
-
-### Features
-- 🎵 **Media Playback Controls** - Play, pause, skip, previous
-- 🗣️ **Voice Commands** - Full voice control integration
-- 📊 **Metadata Display** - Song title, artist, album art
-- 📋 **Playlist Browsing** - Car-optimized playlist navigation
-- 🔍 **Search Functionality** - Voice and text search
-- 🎛️ **Steering Wheel Controls** - Hardware button support
-
-### Technical Implementation
-- Media3 MediaSession for playback control
-- MediaBrowserService for content browsing
-- Custom MediaSessionCallback for Android Auto commands
-- Optimized UI for automotive displays
+- Android Auto implementation notes: `docs/README.md`
+- Code and performance reviews: `docs/REVIEW-SUMMARY.md`, `docs/performance_review.md`, `docs/PERFORMANCE_ANALYSIS.md`
+- Implementation and migration details: `docs/implementation-summary.md`, `docs/MIGRATION-SUMMARY.md`
 
 ## Contributing
 
-### Development Workflow
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Code Style
-- Follow [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html)
-- Use [ktlint](https://ktlint.github.io/) for code formatting
-- Write meaningful commit messages
-- Include tests for new features
-
-### Pull Request Guidelines
-- Ensure all tests pass
-- Update documentation if needed
-- Follow the existing code style
-- Include screenshots for UI changes
+1. Fork and create a feature branch (`git checkout -b feature/my-change`).
+2. Make changes, add tests when possible, and run the test suite.
+3. Open a PR describing the change and any user-facing impact (screenshots for UI tweaks help).
 
 ## License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For support and questions:
-- Create an issue in the repository
-- Check existing documentation
-- Review the code comments for implementation details 
+Distributed under the MIT License. See `LICENSE` for details.
