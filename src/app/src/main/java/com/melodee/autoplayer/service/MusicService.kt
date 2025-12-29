@@ -29,6 +29,7 @@ import androidx.media3.common.PlaybackException
 import com.melodee.autoplayer.R
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.Playlist
+import com.melodee.autoplayer.domain.model.SongPagedResponse
 import com.melodee.autoplayer.presentation.ui.MainActivity
 import com.melodee.autoplayer.data.SettingsManager
 import com.melodee.autoplayer.data.AuthenticationManager
@@ -488,7 +489,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
                 
                 if (songs.isNotEmpty()) {
-                    songs.forEach { song ->
+                    for (song in songs) {
                         mediaItems.add(createMediaItem(song, playlistId))
                     }
                 } else {
