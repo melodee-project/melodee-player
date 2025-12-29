@@ -154,9 +154,9 @@ object NetworkModule {
 
                 // Handle 401 Unauthorized responses with a single refresh attempt
                 if (!skipAuth && response.code == 401) {
-                    response.close()
                     val refreshed = attemptTokenRefresh()
                     if (refreshed) {
+                        response.close()
                         val retry = original.newBuilder()
                             .method(original.method, original.body)
                             .header("Authorization", "Bearer $authToken")

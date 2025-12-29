@@ -37,6 +37,8 @@ import com.melodee.autoplayer.MelodeeApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.map
 
+import android.provider.MediaStore
+
 class MusicService : MediaBrowserServiceCompat() {
     private var player: ExoPlayer? = null
     private var currentSong: Song? = null
@@ -477,7 +479,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.d("MusicService", "Fetching songs for playlist: $playlistId")
                 // Set the current browsing playlist ID
                 currentBrowsingPlaylistId = playlistId
-                val songs = fetchPlaylistSongs(playlistId)
+                val response = fetchPlaylistSongs(playlistId)
+                val songs = response.data
                 
                 // Cache the songs for later use in onPlayFromMediaId
                 currentBrowsingPlaylistSongs = songs
@@ -539,7 +542,7 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private suspend fun fetchPlaylistSongs(playlistId: String): List<Song> {
+    private suspend fun fetchPlaylistSongs(playlistId: String): SongPagedResponse {
         return withContext(Dispatchers.IO) {
             try {
                 Log.d("MusicService", "Fetching songs for playlist: $playlistId")
@@ -560,7 +563,7 @@ class MusicService : MediaBrowserServiceCompat() {
                     Log.d("MusicService", "Sample song: ${song.title} - Stream URL: ${song.streamUrl}")
                 }
                 
-                return@withContext songsResponse.data
+                return@withContext songsResponse
                 
             } catch (e: Exception) {
                 Log.e("MusicService", "Failed to fetch playlist songs for $playlistId", e)
@@ -615,6 +618,77 @@ class MusicService : MediaBrowserServiceCompat() {
                 result.sendResult(errorResults)
             }
         }
+    }
+
+    private suspend fun performStructuredSearch(title: String, artistName: String): List<MediaBrowserCompat.MediaItem> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val musicApi = NetworkModule.getMusicApi()
+                
+                // 1. Find the artist first to get their ID
+                Log.d("MusicService", "Looking up artist: $artistName")
+                val artistResponse = musicApi.getArtists(query = artistName, page = 1, pageSize = 5)
+                val artist = artistResponse.data.firstOrNull { it.name.equals(artistName, ignoreCase = true) } 
+                    ?: artistResponse.data.firstOrNull()
+                
+                if (artist != null) {
+                    Log.d("MusicService", "Found artist: ${artist.name} (${artist.id})")
+                    // 2. Search for the song filtering by this artist
+                    val songsResponse = musicApi.searchSongs(
+                        query = title, 
+                        page = 1, 
+                        pageSize = 10,
+                        artistId = artist.id.toString()
+                    )
+                    
+                    if (songsResponse.data.isNotEmpty()) {
+                        Log.i("MusicService", "Found ${songsResponse.data.size} songs matching '$title' by '${artist.name}'")
+                        return@withContext songsResponse.data.map { createMediaItem(it, fromSearch = true) }
+                    }
+                }
+                
+                // Fallback: If structured search fails (e.g. artist not found or exact match failed),
+                // try a combined text search
+                Log.d("MusicService", "Structured search yielded no results, falling back to combined query")
+                return@withContext performApiSearch("$title $artistName")
+                
+            } catch (e: Exception) {
+                Log.e("MusicService", "Structured search failed", e)
+                return@withContext performApiSearch("$title $artistName")
+            }
+        }
+    }
+
+    private suspend fun performArtistSearch(artistName: String): List<MediaBrowserCompat.MediaItem> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val musicApi = NetworkModule.getMusicApi()
+                Log.d("MusicService", "Searching for artist: $artistName")
+                
+                // Get artist
+                val artistResponse = musicApi.getArtists(query = artistName, page = 1, pageSize = 1)
+                val artist = artistResponse.data.firstOrNull()
+                
+                if (artist != null) {
+                    Log.d("MusicService", "Found artist: ${artist.name}, fetching top songs")
+                    // Get artist's songs
+                    val songsResponse = musicApi.getArtistSongs(artist.id.toString(), 1, 50)
+                    return@withContext songsResponse.data.map { createMediaItem(it, fromSearch = true) }
+                }
+                
+                return@withContext emptyList()
+            } catch (e: Exception) {
+                Log.e("MusicService", "Artist search failed", e)
+                return@withContext emptyList()
+            }
+        }
+    }
+
+    private suspend fun performAlbumSearch(albumName: String, artistName: String?): List<MediaBrowserCompat.MediaItem> {
+        // For now, fall back to text search as we don't have a direct album search endpoint exposed easily
+        // in the current MusicApi interface without searching artists first
+        val query = if (artistName != null) "$albumName $artistName" else albumName
+        return performApiSearch(query)
     }
 
     private suspend fun performApiSearch(query: String): List<MediaBrowserCompat.MediaItem> {
@@ -1590,6 +1664,16 @@ class MusicService : MediaBrowserServiceCompat() {
         mediaSession = MediaSessionCompat(this, "Melodee")
         Log.d("MusicService", "MediaSession created: ${mediaSession?.sessionToken}")
         
+        // Set the session activity (opens when user taps the notification or Now Playing card)
+        val sessionIntent = Intent(this, MainActivity::class.java)
+        val sessionPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            sessionIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        mediaSession?.setSessionActivity(sessionPendingIntent)
+        
         // Log MediaSession details for debugging
         Log.i("MusicService", "=== MEDIASESSION DEBUG INFO ===")
         Log.i("MusicService", "Session tag: Melodee")
@@ -1698,7 +1782,28 @@ class MusicService : MediaBrowserServiceCompat() {
                         Log.i("MusicService", "Android Auto voice search request: '$query'")
                         serviceScope.launch {
                             try {
-                                val searchResults = performApiSearch(query)
+                                // Check for structured extras first (e.g. "Play [Song] by [Artist]")
+                                val focus = extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)
+                                val artist = extras?.getString(MediaStore.EXTRA_MEDIA_ARTIST)
+                                val title = extras?.getString(MediaStore.EXTRA_MEDIA_TITLE)
+                                val album = extras?.getString(MediaStore.EXTRA_MEDIA_ALBUM)
+                                
+                                Log.i("MusicService", "Voice extras - Focus: $focus, Artist: $artist, Title: $title, Album: $album")
+                                
+                                val searchResults = if (focus == MediaStore.Audio.Media.ENTRY_CONTENT_TYPE && !artist.isNullOrBlank() && !title.isNullOrBlank()) {
+                                    Log.i("MusicService", "Detected structured query: Song '$title' by Artist '$artist'")
+                                    performStructuredSearch(title, artist)
+                                } else if (focus == MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE && !artist.isNullOrBlank()) {
+                                    Log.i("MusicService", "Detected structured query: Artist '$artist'")
+                                    performArtistSearch(artist)
+                                } else if (focus == MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE && !album.isNullOrBlank()) {
+                                    Log.i("MusicService", "Detected structured query: Album '$album'")
+                                    performAlbumSearch(album, artist)
+                                } else {
+                                    Log.i("MusicService", "Performing standard text search for '$query'")
+                                    performApiSearch(query)
+                                }
+
                                 if (searchResults.isNotEmpty()) {
                                     // Find the first playable song in search results
                                     val firstSong = searchResults.find { item ->
@@ -1889,7 +1994,13 @@ class MusicService : MediaBrowserServiceCompat() {
         serviceScope.launch {
             try {
                 Log.d("MusicService", "Fetching playlist songs...")
-                val playlistSongs = fetchPlaylistSongs(playlistId)
+                val response = fetchPlaylistSongs(playlistId)
+                val playlistSongs = response.data
+                
+                // Initialize pagination state for continuous playback
+                remotePlaylistId = playlistId
+                hasMorePlaylistPages = response.meta.hasNext
+                nextPlaylistPage = response.meta.currentPage + 1
                 
                 if (playlistSongs.isNotEmpty()) {
                     Log.i("MusicService", "Fetched ${playlistSongs.size} songs from playlist")
