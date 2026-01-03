@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -249,16 +250,13 @@ fun MainScreen(
         }
     }
 
-    // Handle navigation based on authentication state changes
+    // Handle navigation when user becomes unauthenticated (e.g., logout or session expiry)
     LaunchedEffect(isAuthenticated) {
         val currentRoute = navController.currentDestination?.route
+        Log.d("MainActivity", "LaunchedEffect(isAuthenticated): isAuthenticated=$isAuthenticated, currentRoute=$currentRoute")
         
-        if (isAuthenticated && currentRoute == "login") {
-            Log.d("MainActivity", "User became authenticated, navigating to home")
-            navController.navigate("home") {
-                popUpTo("login") { inclusive = true }
-            }
-        } else if (!isAuthenticated && currentRoute != "login") {
+        // Only handle logout case - login navigation is handled directly in onLoginSuccess callback
+        if (!isAuthenticated && currentRoute != null && currentRoute != "login") {
             Log.d("MainActivity", "User became unauthenticated, navigating to login")
             navController.navigate("login") {
                 popUpTo(0) { inclusive = true }
@@ -266,13 +264,17 @@ fun MainScreen(
         }
     }
     
-    // Determine start destination based on authentication state
-    val startDestination = if (isAuthenticated) {
-        Log.d("MainActivity", "User is authenticated, starting with home screen")
-        "home"
-    } else {
-        Log.d("MainActivity", "User not authenticated, starting with login screen") 
-        "login"
+    // Determine start destination based on INITIAL authentication state only
+    // Using rememberSaveable ensures this is only computed once and survives recomposition
+    // Navigation after login is handled by LaunchedEffect(isAuthenticated) above
+    val startDestination = rememberSaveable {
+        if (authenticationManager.isAuthenticated.value) {
+            Log.d("MainActivity", "User is authenticated, starting with home screen")
+            "home"
+        } else {
+            Log.d("MainActivity", "User not authenticated, starting with login screen") 
+            "login"
+        }
     }
     
     // Set up ViewModels when user is authenticated
@@ -547,8 +549,11 @@ fun MainScreen(
                         // Reinitialize scrobble manager with user information
                         onLoginSuccess(authResponse)
                         
-                        // Don't manually navigate here - let LaunchedEffect(isAuthenticated) handle it
-                        // This prevents double navigation which can cause the app to minimize
+                        // Navigate to home screen after successful login
+                        Log.d("MainActivity", "Login successful, navigating to home")
+                        navController.navigate("home") {
+                            popUpTo("login") { inclusive = true }
+                        }
                     }
                 )
             }

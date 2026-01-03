@@ -34,6 +34,7 @@ fun LoginScreen(
     var emailOrUsername by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var serverUrl by remember { mutableStateOf(viewModel.serverUrl) }
+    var hasHandledSuccess by remember { mutableStateOf(false) }
     
     val loginState by viewModel.loginState.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -53,11 +54,14 @@ fun LoginScreen(
     // Function to handle login
     val handleLogin = {
         keyboardController?.hide()
+        hasHandledSuccess = false  // Reset flag for new login attempt
         viewModel.login(emailOrUsername, password, serverUrl)
     }
 
+    // Handle login success only once per successful login
     LaunchedEffect(loginState) {
-        if (loginState is LoginState.Success) {
+        if (loginState is LoginState.Success && !hasHandledSuccess) {
+            hasHandledSuccess = true
             onLoginSuccess((loginState as LoginState.Success).response)
         }
     }

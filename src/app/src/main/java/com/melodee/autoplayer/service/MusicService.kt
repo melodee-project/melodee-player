@@ -313,8 +313,7 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun loadPlaylists(result: Result<List<MediaBrowserCompat.MediaItem>>) {
         // Check authentication first
-        val authToken = NetworkModule.getAuthToken()
-        if (authToken.isNullOrEmpty()) {
+        if (!ensureAuthentication()) {
             Log.w("MusicService", "No auth token available for playlists")
             val errorItems = listOf(
                 MediaBrowserCompat.MediaItem(
@@ -454,8 +453,7 @@ class MusicService : MediaBrowserServiceCompat() {
 
     private fun loadPlaylistSongs(playlistId: String, result: Result<List<MediaBrowserCompat.MediaItem>>) {
         // Check authentication first
-        val authToken = NetworkModule.getAuthToken()
-        if (authToken.isNullOrEmpty()) {
+        if (!ensureAuthentication()) {
             Log.w("MusicService", "No auth token available for playlist songs")
             val errorItems = listOf(
                 MediaBrowserCompat.MediaItem(
@@ -698,10 +696,10 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.d("MusicService", "Starting API search for: '$query'")
                 
                 // Check if we have authentication
-                val authToken = NetworkModule.getAuthToken()
-                Log.d("MusicService", "Auth token available: ${!authToken.isNullOrEmpty()}")
+                val isAuthenticated = ensureAuthentication()
+                Log.d("MusicService", "Auth token available: $isAuthenticated")
                 
-                if (authToken.isNullOrEmpty()) {
+                if (!isAuthenticated) {
                     Log.w("MusicService", "No auth token available for search")
                     return@withContext listOf(
                         MediaBrowserCompat.MediaItem(
@@ -2370,6 +2368,24 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.i("MusicService", "Fully authenticated: $isFullyAuthenticated")
         
         return isFullyAuthenticated
+    }
+
+    private fun ensureAuthentication(): Boolean {
+        // Fast path: if NetworkModule has token, we are good
+        if (NetworkModule.isAuthenticated()) {
+            return true
+        }
+        
+        Log.w("MusicService", "NetworkModule not authenticated, attempting to restore from storage")
+        
+        // Try to restore from persistent storage
+        if (authenticationManager.restoreAuthenticationFromStorage()) {
+            Log.i("MusicService", "Authentication restored from storage")
+            return true
+        }
+        
+        Log.w("MusicService", "Failed to restore authentication")
+        return false
     }
 
     private fun handlePlaybackFailure(song: Song, error: Exception) {
