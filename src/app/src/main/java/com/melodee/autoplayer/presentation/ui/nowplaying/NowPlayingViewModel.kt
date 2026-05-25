@@ -249,13 +249,20 @@ class NowPlayingViewModel : ViewModel() {
     
     fun setQueue(songs: List<Song>, startIndex: Int = 0) {
         Log.d("NowPlayingViewModel", "Set queue with ${songs.size} songs")
-        context?.let { ctx ->
-            val intent = Intent(ctx, MusicService::class.java).apply {
-                action = MusicService.ACTION_SET_PLAYLIST
-                putParcelableArrayListExtra(MusicService.EXTRA_PLAYLIST, ArrayList(songs))
-                putExtra("START_INDEX", startIndex)
+        val service = musicService
+        if (service != null) {
+            service.playPlaylistQueue(songs, startIndex)
+            return
+        }
+
+        songs.getOrNull(startIndex)?.let { song ->
+            context?.let { ctx ->
+                val intent = Intent(ctx, MusicService::class.java).apply {
+                    action = MusicService.ACTION_PLAY_SONG
+                    putExtra(MusicService.EXTRA_SONG, song)
+                }
+                ctx.startService(intent)
             }
-            ctx.startService(intent)
         }
     }
     
@@ -332,4 +339,4 @@ class NowPlayingViewModel : ViewModel() {
         
         Log.d("NowPlayingViewModel", "Logout completed - all data cleared")
     }
-} 
+}

@@ -99,7 +99,7 @@ Update `app/build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    val roomVersion = "2.6.1"
+    val roomVersion = "2.8.4"
     
     // Room
     implementation("androidx.room:room-runtime:$roomVersion")
@@ -107,8 +107,8 @@ dependencies {
     ksp("androidx.room:room-compiler:$roomVersion")
     
     // Paging
-    implementation("androidx.paging:paging-runtime-ktx:3.2.1")
-    implementation("androidx.paging:paging-compose:3.2.1")
+    implementation("androidx.paging:paging-runtime-ktx:3.5.0")
+    implementation("androidx.paging:paging-compose:3.5.0")
     implementation("androidx.room:room-paging:$roomVersion")
 }
 ```
@@ -118,9 +118,8 @@ Also add KSP plugin to `plugins` block:
 ```kotlin
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.parcelize")
-    id("com.google.devtools.ksp") version "1.9.20-1.0.14"
+    id("com.google.devtools.ksp") version "2.3.8"
     id("jacoco")
 }
 ```

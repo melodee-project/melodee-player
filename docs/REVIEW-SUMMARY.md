@@ -2,7 +2,7 @@
 
 **Date**: 2025-12-27  
 **Project**: Melodee Android Auto Player  
-**Version**: 1.7.1 → 1.8.0 (Proposed)  
+**Version**: 1.8.0
 **Review Type**: Performance, Persistence, and Usability Analysis
 
 ---

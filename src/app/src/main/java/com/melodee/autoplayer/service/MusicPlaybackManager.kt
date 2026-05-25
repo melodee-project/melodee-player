@@ -151,7 +151,7 @@ class MusicPlaybackManager(private val context: Context) {
     }
     
     fun playNext(): Boolean {
-        val nextSong = getNextSong()
+        val nextSong = moveToNext()
         return if (nextSong != null) {
             playSong(nextSong)
         } else {
@@ -161,13 +161,29 @@ class MusicPlaybackManager(private val context: Context) {
     }
     
     fun playPrevious(): Boolean {
-        val previousSong = getPreviousSong()
+        val previousSong = moveToPrevious()
         return if (previousSong != null) {
             playSong(previousSong)
         } else {
             Logger.d("MusicPlaybackManager", "No previous song available")
             false
         }
+    }
+
+    fun moveToNext(): Song? {
+        val nextSong = getNextSong() ?: return null
+        _currentSong.value = nextSong
+        addToHistory(nextSong)
+        Logger.d("MusicPlaybackManager", "Moved to next song: ${nextSong.title}")
+        return nextSong
+    }
+
+    fun moveToPrevious(): Song? {
+        val previousSong = getPreviousSong() ?: return null
+        _currentSong.value = previousSong
+        addToHistory(previousSong)
+        Logger.d("MusicPlaybackManager", "Moved to previous song: ${previousSong.title}")
+        return previousSong
     }
     
     private fun getNextSong(): Song? {

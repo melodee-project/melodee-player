@@ -9,10 +9,16 @@ import com.google.gson.stream.JsonWriter
 import com.melodee.autoplayer.util.Logger
 import com.melodee.autoplayer.domain.model.RefreshRequest
 import kotlinx.coroutines.runBlocking
+import okhttp3.Authenticator
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.Route
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,6 +36,7 @@ object NetworkModule {
     private var retrofit: Retrofit? = null
     private var musicApi: MusicApi? = null
     private var scrobbleApi: ScrobbleApi? = null
+    private var refreshApi: MusicApi? = null
     
     // Thread-safe locks for configuration changes
     private val configLock = ReentrantReadWriteLock()
@@ -38,11 +45,17 @@ object NetworkModule {
     @Volatile
     private var onAuthenticationFailure: (() -> Unit)? = null
     @Volatile
-    private var onTokenUpdated: ((String, String) -> Unit)? = null
+    private var onTokenUpdated: ((String, String, String) -> Unit)? = null
     
     // Thread-safe flag to prevent multiple 401 callbacks
     private val handlingAuthFailure = AtomicBoolean(false)
     private val refreshLock = Any()
+
+    private enum class TokenRefreshResult {
+        SUCCESS,
+        INVALID_CREDENTIALS,
+        TRANSIENT_FAILURE
+    }
 
     fun init(context: android.content.Context) {
         // Keep application context only
@@ -100,7 +113,7 @@ object NetworkModule {
         onAuthenticationFailure = callback
     }
 
-    fun setTokenUpdateCallback(callback: (newAccessToken: String, newRefreshToken: String) -> Unit) {
+    fun setTokenUpdateCallback(callback: (newAccessToken: String, newRefreshToken: String, refreshTokenExpiresAt: String) -> Unit) {
         onTokenUpdated = callback
     }
     
@@ -123,6 +136,8 @@ object NetworkModule {
 
     private fun createRetrofitInstance() {
         val ctx = appContext
+        val gson = createGson()
+        refreshApi = createRefreshApi(gson)
 
         // Configure dispatcher and connection pool for better control
         val dispatcher = okhttp3.Dispatcher().apply {
@@ -145,37 +160,18 @@ object NetworkModule {
                 val skipAuth = original.header("X-Refresh-Request") == "true"
                 val requestBuilder = original.newBuilder()
                     .method(original.method, original.body)
+                val currentAuthToken = configLock.read { authToken }
 
-                if (!skipAuth && authToken.isNotEmpty()) {
-                    requestBuilder.header("Authorization", "Bearer $authToken")
+                if (!skipAuth && currentAuthToken.isNotEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer $currentAuthToken")
                 }
 
-                var response = chain.proceed(requestBuilder.build())
-
-                // Handle 401 Unauthorized responses with a single refresh attempt
-                if (!skipAuth && response.code == 401) {
-                    val refreshed = attemptTokenRefresh()
-                    if (refreshed) {
-                        response.close()
-                        val retry = original.newBuilder()
-                            .method(original.method, original.body)
-                            .header("Authorization", "Bearer $authToken")
-                            .build()
-                        response = chain.proceed(retry)
-                    } else if (handlingAuthFailure.compareAndSet(false, true)) {
-                        Log.w("NetworkModule", "Received 401 Unauthorized - token expired and refresh failed")
-                        clearAuthentication()
-                        onAuthenticationFailure?.invoke()
-                    }
-                }
-
-                response
+                chain.proceed(requestBuilder.build())
             }
+            .authenticator(TokenAuthenticator())
             // Retry with simple exponential backoff for idempotent requests and 429/5xx
             .addInterceptor(RetryInterceptor(maxRetries = 3))
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            })
+            .addInterceptor(createLoggingInterceptor())
             // Conservative, but responsive timeouts
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -205,6 +201,35 @@ object NetworkModule {
         val okHttpClient = okHttpBuilder.build()
 
         // Create Gson with explicit UUID adapter for safe error handling
+        retrofit = Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+
+        musicApi = retrofit?.create(MusicApi::class.java)
+        scrobbleApi = retrofit?.create(ScrobbleApi::class.java)
+    }
+
+    private fun createRefreshApi(gson: com.google.gson.Gson): MusicApi? {
+        if (baseUrl.isEmpty()) return null
+
+        val refreshClient = OkHttpClient.Builder()
+            .addInterceptor(createLoggingInterceptor())
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(refreshClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(MusicApi::class.java)
+    }
+
+    private fun createGson(): com.google.gson.Gson {
         val gson = GsonBuilder()
             .registerTypeAdapter(UUID::class.java, object : TypeAdapter<UUID>() {
                 override fun write(out: JsonWriter, value: UUID?) {
@@ -236,32 +261,108 @@ object NetworkModule {
             })
             .create()
 
-        retrofit = Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create(gson))
-            .build()
-
-        musicApi = retrofit?.create(MusicApi::class.java)
-        scrobbleApi = retrofit?.create(ScrobbleApi::class.java)
+        return gson
     }
 
-    private fun attemptTokenRefresh(): Boolean {
+    private fun attemptTokenRefresh(): TokenRefreshResult {
         synchronized(refreshLock) {
-            if (refreshToken.isEmpty() || retrofit == null) return false
+            val currentRefreshToken = configLock.read { refreshToken }
+            val api = refreshApi
+            if (currentRefreshToken.isEmpty() || api == null) return TokenRefreshResult.INVALID_CREDENTIALS
             return try {
-                val api = retrofit!!.create(MusicApi::class.java)
                 val refreshResponse = runBlocking {
-                    api.refresh(RefreshRequest(refreshToken), skipAuthHeader = true)
+                    api.refresh(RefreshRequest(currentRefreshToken), skipAuthHeader = true)
                 }
-                setTokens(refreshResponse.token, refreshResponse.refreshToken)
-                onTokenUpdated?.invoke(refreshResponse.token, refreshResponse.refreshToken)
-                true
+                val newRefreshToken = refreshResponse.refreshToken.ifBlank { currentRefreshToken }
+                setTokens(refreshResponse.token, newRefreshToken)
+                onTokenUpdated?.invoke(
+                    refreshResponse.token,
+                    newRefreshToken,
+                    refreshResponse.refreshTokenExpiresAt
+                )
+                TokenRefreshResult.SUCCESS
+            } catch (e: HttpException) {
+                if (e.code() == 400 || e.code() == 401 || e.code() == 403) {
+                    Log.e("NetworkModule", "Token refresh rejected by server with HTTP ${e.code()}")
+                    TokenRefreshResult.INVALID_CREDENTIALS
+                } else {
+                    Log.e("NetworkModule", "Token refresh failed with recoverable HTTP ${e.code()}", e)
+                    TokenRefreshResult.TRANSIENT_FAILURE
+                }
+            } catch (e: IOException) {
+                Log.e("NetworkModule", "Token refresh failed due to network error; credentials retained", e)
+                TokenRefreshResult.TRANSIENT_FAILURE
             } catch (e: Exception) {
-                Log.e("NetworkModule", "Token refresh failed", e)
-                false
+                Log.e("NetworkModule", "Token refresh failed unexpectedly; credentials retained", e)
+                TokenRefreshResult.TRANSIENT_FAILURE
             }
         }
+    }
+
+    private class TokenAuthenticator : Authenticator {
+        override fun authenticate(route: Route?, response: Response): Request? {
+            if (response.request.header("X-Refresh-Request") == "true") return null
+            if (responseCount(response) > 1) return null
+
+            val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
+            val currentToken = configLock.read { authToken }
+            if (currentToken.isNotEmpty() && currentToken != requestToken) {
+                return response.request.newBuilder()
+                    .header("Authorization", "Bearer $currentToken")
+                    .build()
+            }
+
+            return when (attemptTokenRefresh()) {
+                TokenRefreshResult.SUCCESS -> {
+                    val refreshedToken = configLock.read { authToken }
+                    if (refreshedToken.isEmpty()) {
+                        null
+                    } else {
+                        response.request.newBuilder()
+                            .header("Authorization", "Bearer $refreshedToken")
+                            .build()
+                    }
+                }
+                TokenRefreshResult.INVALID_CREDENTIALS -> {
+                    if (handlingAuthFailure.compareAndSet(false, true)) {
+                        Log.w("NetworkModule", "Received 401 Unauthorized - refresh token is invalid or expired")
+                        clearAuthentication()
+                        onAuthenticationFailure?.invoke()
+                    }
+                    null
+                }
+                TokenRefreshResult.TRANSIENT_FAILURE -> {
+                    Log.w("NetworkModule", "Received 401 Unauthorized, but token refresh failed transiently; keeping stored authentication for retry")
+                    null
+                }
+            }
+        }
+
+        private fun responseCount(response: Response): Int {
+            var count = 1
+            var prior = response.priorResponse
+            while (prior != null) {
+                count++
+                prior = prior.priorResponse
+            }
+            return count
+        }
+    }
+
+    private fun createLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor().apply {
+            redactHeader("Authorization")
+            level = if (isDebuggable()) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        }
+    }
+
+    private fun isDebuggable(): Boolean {
+        val flags = appContext?.applicationInfo?.flags ?: return false
+        return flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
     }
 
     fun getMusicApi(): MusicApi {

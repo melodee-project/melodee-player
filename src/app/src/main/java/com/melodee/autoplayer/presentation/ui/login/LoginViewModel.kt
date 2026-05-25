@@ -121,8 +121,13 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     // URL normalization is now handled by UrlParser.normalizeServerUrl()
 
     fun logout() {
-        // Clear user data from settings
-        settingsManager.clearUserData()
+        try {
+            val app = getApplication<Application>() as com.melodee.autoplayer.MelodeeApplication
+            app.authenticationManager.logout()
+        } catch (e: Exception) {
+            Log.w("LoginViewModel", "Failed to update AuthenticationManager on logout", e)
+            settingsManager.clearUserData()
+        }
         
         // Reset login state
         _loginState.value = LoginState.Initial

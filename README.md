@@ -6,15 +6,15 @@
 
   [![Android CI](https://github.com/melodee-project/melodee-player/actions/workflows/android.yml/badge.svg)](https://github.com/melodee-project/melodee-player/actions/workflows/android.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-  ![minSdk](https://img.shields.io/badge/minSdk-21-blue)
-  ![targetSdk](https://img.shields.io/badge/targetSdk-35-blue)
+  ![minSdk](https://img.shields.io/badge/minSdk-23-blue)
+  ![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)
 
   Features | Quick Start | Android Auto | Architecture | Testing | Documentation | Contributing
 </div>
 
 ## Overview
 
-Melodee Player is a Kotlin/Compose app (version 1.7.1, minSdk 21 / targetSdk 35) that streams music from a Melodee server to phones and Android Auto. It ships with a background MediaBrowserService for car interfaces, a Compose UI for handheld use, and a Media3-based playback stack with caching and scrobbling.
+Melodee Player is a Kotlin/Compose app (version 1.8.0, minSdk 23 / targetSdk 36) that streams music from a Melodee server to phones and Android Auto. It ships with a background MediaBrowserService for car interfaces, a Compose UI for handheld use, and a Media3-based playback stack with caching and scrobbling.
 
 ## Features
 
@@ -28,8 +28,8 @@ Melodee Player is a Kotlin/Compose app (version 1.7.1, minSdk 21 / targetSdk 35)
 ## Quick Start
 
 1. **Requirements**
-   - Android Studio Hedgehog (2023.1.1)+, JDK 17, Android SDK Platform 35
-   - Device or emulator on API 21+ (Android Auto features require a device or emulator with Android Auto)
+   - Current Android Studio, JDK 21+, Android SDK Platform 36
+   - Device or emulator on API 23+ (Android Auto features require a device or emulator with Android Auto)
    - A running Melodee API server (use your deployment or the bundled `api-server/`—see its README for setup)
 2. **Clone and open**
    ```bash
@@ -70,7 +70,7 @@ Melodee Player is a Kotlin/Compose app (version 1.7.1, minSdk 21 / targetSdk 35)
 - UI: Jetpack Compose, Material 3, Navigation Compose
 - Playback: Media3/ExoPlayer, MediaBrowserServiceCompat, MediaSessionCompat, Media cache/prefetch
 - Networking: Retrofit + OkHttp (logging, retry/backoff, caching), Gson, request deduplication, token refresh handling
-- Data/auth: SharedPreferences-based SettingsManager (encrypted SecureSettingsManager available for migration), URL normalization, scrobble API integration
+- Data/auth: Encrypted SharedPreferences-backed SettingsManager, URL normalization, scrobble API integration
 - Concurrency: Kotlin Coroutines + Flow
 - Images: Coil (+ GIF support)
 - Testing: JUnit, MockK, Truth, Robolectric, Compose UI tests, AndroidX Test, Macrobenchmark, JaCoCo coverage

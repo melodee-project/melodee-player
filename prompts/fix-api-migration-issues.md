@@ -100,7 +100,7 @@ timestamp = (tracker.startTime / 1000.0),  // 1703462400.0
    - Copy complete test from review doc section "Priority 2: Retrofit Path Generation Test"
    - Add dependency to `src/app/build.gradle.kts`:
      ```kotlin
-     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+     testImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
      ```
    - Run test: `./gradlew app:testDebugUnitTest --tests "RetrofitPathTest"`
 

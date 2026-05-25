@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
-import java.util.*
 import android.util.Log
 
 class PlaylistViewModel(application: Application) : AndroidViewModel(application) {
@@ -108,6 +107,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
 
     private var currentPage = 1
     private var hasMoreSongs = true
+    private var currentPlaylistPageSize = 50
     private var currentPlaylistId: String? = null
     private var isRefreshing = false
     private var autoPlayAfterRefresh = false
@@ -250,6 +250,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         if (isNewPlaylist) {
             currentPage = 1
             hasMoreSongs = true
+            currentPlaylistPageSize = 50
             _songs.value = emptyList()
             isRefreshing = false // Reset refresh state for new playlist
         }
@@ -280,6 +281,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         val allSongs = applyVirtualScrolling(_songs.value, response.data, currentPage == 1)
                         _songs.value = allSongs
                         hasMoreSongs = response.meta.hasNext
+                        currentPlaylistPageSize = response.meta.pageSize.coerceAtLeast(1)
                         currentPage = response.meta.currentPage + 1
                         
                         // Update pagination display values
@@ -302,30 +304,12 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         // Auto-play the first song when loading a NEW playlist or after a manual refresh
                         if (response.data.isNotEmpty() && (isNewPlaylist || autoPlayAfterRefresh)) {
                             Log.d("PlaylistViewModel", "Auto-playing first song of new playlist: $playlistId")
-                            // Stop current playback if any
-                            context?.let { ctx ->
-                                val stopIntent = Intent(ctx, MusicService::class.java).apply {
-                                    action = MusicService.ACTION_STOP
-                                }
-                                ctx.startService(stopIntent)
-                            }
-                            
+
                             // Start playing the first song with playlist context
                             val firstSong = response.data.first()
                             _currentSong.value = firstSong
                             _isPlaying.value = true
-                            context?.let { ctx ->
-                                val playIntent = Intent(ctx, MusicService::class.java).apply {
-                                    action = MusicService.ACTION_SET_PLAYLIST
-                                    putParcelableArrayListExtra(MusicService.EXTRA_PLAYLIST, ArrayList(_songs.value))
-                                    putExtra("START_INDEX", 0)
-                                    // Provide playlist pagination context so service can load more
-                                    putExtra("PLAYLIST_ID", playlistId)
-                                    putExtra("NEXT_PAGE", currentPage)
-                                    putExtra("HAS_MORE", hasMoreSongs)
-                                }
-                                ctx.startService(playIntent)
-                            }
+                            playPlaylistQueue(firstSong, 0)
                             autoPlayAfterRefresh = false
                         } else if (!isNewPlaylist) {
                             Log.d("PlaylistViewModel", "Returning to existing playlist $playlistId, preserving current playback")
@@ -357,6 +341,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         _isLoading.value = true
         currentPage = 1
         hasMoreSongs = true
+        currentPlaylistPageSize = 50
         _songs.value = emptyList()
         isRefreshing = true
         autoPlayAfterRefresh = true
@@ -447,6 +432,41 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         currentPlaylistId?.let { loadPlaylist(it, allowPagination = true) }
     }
 
+    private fun playPlaylistQueue(song: Song, startIndex: Int) {
+        val playlistId = currentPlaylistId
+        val songsToPlay = _songs.value
+        val service = musicService
+        if (service != null) {
+            service.playPlaylistQueue(
+                songs = songsToPlay,
+                startIndex = startIndex,
+                playlistId = playlistId,
+                nextPage = currentPage,
+                hasMore = hasMoreSongs,
+                pageSize = currentPlaylistPageSize
+            )
+            return
+        }
+
+        context?.let { ctx ->
+            val intent = if (playlistId != null) {
+                Intent(ctx, MusicService::class.java).apply {
+                    action = MusicService.ACTION_SET_PLAYLIST
+                    putExtra(MusicService.EXTRA_START_INDEX, startIndex)
+                    putExtra(MusicService.EXTRA_START_SONG_ID, song.id.toString())
+                    putExtra(MusicService.EXTRA_PLAYLIST_ID, playlistId)
+                    putExtra(MusicService.EXTRA_PLAYLIST_PAGE_SIZE, currentPlaylistPageSize)
+                }
+            } else {
+                Intent(ctx, MusicService::class.java).apply {
+                    action = MusicService.ACTION_PLAY_SONG
+                    putExtra(MusicService.EXTRA_SONG, song)
+                }
+            }
+            ctx.startService(intent)
+        }
+    }
+
     fun playSong(song: Song) {
         if (song == currentSong.value) {
             // If the same song is clicked, toggle play/pause
@@ -455,22 +475,12 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             // Play the new song from playlist context
             _currentSong.value = song
             _isPlaying.value = true
-            context?.let { ctx ->
-                val songIndex = _songs.value.indexOf(song)
-                if (songIndex >= 0) {
-                    // Set the entire playlist as the queue with playlist context
-                    val intent = Intent(ctx, MusicService::class.java).apply {
-                        action = MusicService.ACTION_SET_PLAYLIST
-                        putParcelableArrayListExtra(MusicService.EXTRA_PLAYLIST, ArrayList(_songs.value))
-                        putExtra("START_INDEX", songIndex)
-                        // Provide playlist pagination context so service can load more
-                        putExtra("PLAYLIST_ID", currentPlaylistId)
-                        putExtra("NEXT_PAGE", currentPage)
-                        putExtra("HAS_MORE", hasMoreSongs)
-                    }
-                    ctx.startService(intent)
-                } else {
-                    // Fallback to single song if not found in playlist
+            val songIndex = _songs.value.indexOf(song)
+            if (songIndex >= 0) {
+                playPlaylistQueue(song, songIndex)
+            } else {
+                // Fallback to single song if not found in playlist
+                context?.let { ctx ->
                     val intent = Intent(ctx, MusicService::class.java).apply {
                         action = MusicService.ACTION_PLAY_SONG
                         putExtra(MusicService.EXTRA_SONG, song)
@@ -543,6 +553,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         // Reset pagination
         currentPage = 1
         hasMoreSongs = true
+        currentPlaylistPageSize = 50
         currentPlaylistId = null
         
         // Stop progress updates

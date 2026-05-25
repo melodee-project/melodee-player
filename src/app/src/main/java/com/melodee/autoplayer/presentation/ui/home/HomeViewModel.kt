@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import java.util.UUID
-import java.util.ArrayList
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var repository: MusicRepository? = null
@@ -47,7 +46,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             
             // If we exceed memory limit, keep only the most recent songs
             if (combinedSongs.size > MAX_SONGS_IN_MEMORY) {
-                combinedSongs.takeLast(KEEP_SONGS_ON_CLEANUP) + newSongs
+                combinedSongs.takeLast(KEEP_SONGS_ON_CLEANUP)
             } else {
                 combinedSongs
             }
@@ -576,13 +575,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val ctx = getApplication<Application>()
             // If we have search results, set them as the queue with search context
             if (songs.value.isNotEmpty() && _searchQuery.value.isNotBlank()) {
-                Log.d("HomeViewModel", "Sending ACTION_SET_SEARCH_RESULTS to service")
-                val intent = Intent(ctx, MusicService::class.java).apply {
-                    action = MusicService.ACTION_SET_SEARCH_RESULTS
-                    putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(songs.value))
-                    putExtra("START_INDEX", index)
+                Log.d("HomeViewModel", "Playing service-side search queue")
+                val service = musicService
+                if (service != null) {
+                    service.playSearchQueue(songs.value, index)
+                } else {
+                    val intent = Intent(ctx, MusicService::class.java).apply {
+                        action = MusicService.ACTION_PLAY_SONG
+                        putExtra(MusicService.EXTRA_SONG, song)
+                    }
+                    ctx.startService(intent)
                 }
-                ctx.startService(intent)
             } else {
                 Log.d("HomeViewModel", "Sending ACTION_PLAY_SONG to service (single song)")
                 // Single song playback
@@ -935,12 +938,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             
                             val ctx = getApplication<Application>()
                             Log.d("HomeViewModel", "Playing album: ${album.name} with ${albumSongs.size} songs")
-                            val intent = Intent(ctx, MusicService::class.java).apply {
-                                action = MusicService.ACTION_SET_SEARCH_RESULTS
-                                putParcelableArrayListExtra(MusicService.EXTRA_SEARCH_RESULTS, ArrayList(albumSongs))
-                                putExtra("START_INDEX", 0)
+                            val service = musicService
+                            if (service != null) {
+                                service.playSearchQueue(albumSongs, 0)
+                            } else {
+                                val intent = Intent(ctx, MusicService::class.java).apply {
+                                    action = MusicService.ACTION_PLAY_SONG
+                                    putExtra(MusicService.EXTRA_SONG, albumSongs.first())
+                                }
+                                ctx.startService(intent)
                             }
-                            ctx.startService(intent)
                         }
                     }
             } catch (e: Exception) {
