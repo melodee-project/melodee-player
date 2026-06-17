@@ -1,5 +1,6 @@
 package com.melodee.autoplayer.presentation.ui.home
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
@@ -24,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import java.util.UUID
 
+@SuppressLint("StaticFieldLeak")
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var repository: MusicRepository? = null
     private var musicService: MusicService? = null
@@ -31,19 +33,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var searchJob: Job? = null
     private var performanceMonitor: PerformanceMonitor? = null
     private var didAttemptUserRefresh = false
-    
+
     companion object {
         private const val MAX_SONGS_IN_MEMORY = 150
         private const val KEEP_SONGS_ON_CLEANUP = 75
     }
-    
+
     private fun updateSongsWithVirtualScrolling(newSongs: List<Song>, isFirstPage: Boolean): List<Song> {
         return if (isFirstPage) {
             newSongs
         } else {
             val currentSongs = _songs.value
             val combinedSongs = currentSongs + newSongs
-            
+
             // If we exceed memory limit, keep only the most recent songs
             if (combinedSongs.size > MAX_SONGS_IN_MEMORY) {
                 combinedSongs.takeLast(KEEP_SONGS_ON_CLEANUP)
@@ -52,7 +54,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    
+
     private val _user = MutableStateFlow<User?>(null)
     val user: StateFlow<User?> = _user.asStateFlow()
 
@@ -66,7 +68,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _selectedArtist = MutableStateFlow<Artist?>(null)
     val selectedArtist: StateFlow<Artist?> = _selectedArtist.asStateFlow()
@@ -75,7 +76,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val artists: StateFlow<List<Artist>> = _artists.asStateFlow()
 
     private val _artistSearchQuery = MutableStateFlow("")
-    val artistSearchQuery: StateFlow<String> = _artistSearchQuery.asStateFlow()
 
     private val _isArtistLoading = MutableStateFlow(false)
     val isArtistLoading: StateFlow<Boolean> = _isArtistLoading.asStateFlow()
@@ -85,13 +85,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isAlbumsLoading = MutableStateFlow(false)
     val isAlbumsLoading: StateFlow<Boolean> = _isAlbumsLoading.asStateFlow()
-    
+
     private val _totalAlbums = MutableStateFlow(0)
     val totalAlbums: StateFlow<Int> = _totalAlbums.asStateFlow()
-    
+
     private val _currentAlbumsStart = MutableStateFlow(0)
     val currentAlbumsStart: StateFlow<Int> = _currentAlbumsStart.asStateFlow()
-    
+
     private val _currentAlbumsEnd = MutableStateFlow(0)
     val currentAlbumsEnd: StateFlow<Int> = _currentAlbumsEnd.asStateFlow()
 
@@ -118,7 +118,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
-    
+
     // Keep track of the currently playing song, independent of UI state
     private val _currentPlayingSong = MutableStateFlow<Song?>(null)
     val currentPlayingSong: StateFlow<Song?> = _currentPlayingSong.asStateFlow()
@@ -126,19 +126,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
 
-    private val _currentPosition = MutableStateFlow(0L)
-    val currentPosition: StateFlow<Long> = _currentPosition.asStateFlow()
-
-    private val _currentDuration = MutableStateFlow(0L)
-    val currentDuration: StateFlow<Long> = _currentDuration.asStateFlow()
-
     private var currentPage = 1
     private var hasMorePlaylists = true
     private var hasMoreSongs = true
     private var currentSearchPage = 1
     private var currentArtistPage = 1
     private var hasMoreArtists = true
-    private var progressUpdateJob: Job? = null
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -146,103 +139,87 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             musicService = binder.getService()
             bound = true
             Log.d("HomeViewModel", "Service connected, isPlaying: ${_isPlaying.value}")
-            
+
             // Start observing service state
             observeServiceState()
-            
-            // Ensure progress updates start if we should be playing
-            ensureProgressUpdatesStarted()
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
             musicService = null
             bound = false
             Log.d("HomeViewModel", "Service disconnected")
-            stopProgressUpdates()
         }
-    }
-
-    private fun updateProgress() {
-        val duration = _currentDuration.value
-        val position = _currentPosition.value
-        _playbackProgress.value = if (duration > 0) position.toFloat() / duration else 0f
     }
 
     private fun observeServiceState() {
         viewModelScope.launch {
             musicService?.let { service ->
-                // Observe playlist manager state to track current song changes
-                service.getPlaylistManager().currentSong.collect { song ->
-                    Log.d("HomeViewModel", "Service current song updated: ${song?.title}")
-                    
-                    // Check if the current playback context is SEARCH
-                    val playbackContext = service.getCurrentPlaybackContext()
-                    Log.d("HomeViewModel", "Current playback context: $playbackContext")
-                    
-                    if (song != null) {
-                        // Update the currently playing song regardless of context
-                        _currentPlayingSong.value = song
-                        
-                        // Find the song in our current songs list and update the index
-                        val index = _songs.value.indexOf(song)
-                        if (index >= 0) {
-                            Log.d("HomeViewModel", "Found song in HomeViewModel songs at index: $index (context: $playbackContext)")
-                            // Update both index and playing state to ensure mini player shows
-                            _currentSongIndex.value = index
-                            _isPlaying.value = service.isPlaying()
-                            Log.d("HomeViewModel", "Updated currentSongIndex to: $index, isPlaying: ${_isPlaying.value}")
-                        } else {
-                            Log.d("HomeViewModel", "Song not found in current HomeViewModel songs")
-                            // Song is playing but not in our current view (different context)
-                            if (playbackContext != MusicService.PlaybackContext.SEARCH && 
+                launch {
+                    service.currentSongFlow().collect { song ->
+                        Log.d("HomeViewModel", "Service current song updated: ${song?.title}")
+                        val playbackContext = service.getCurrentPlaybackContext()
+                        Log.d("HomeViewModel", "Current playback context: $playbackContext")
+
+                        if (song != null) {
+                            _currentPlayingSong.value = song
+
+                            val index = _songs.value.indexOf(song)
+                            if (index >= 0) {
+                                Log.d("HomeViewModel", "Found song in HomeViewModel songs at index: $index (context: $playbackContext)")
+                                _currentSongIndex.value = index
+                            } else if (playbackContext != MusicService.PlaybackContext.SEARCH &&
                                 playbackContext != MusicService.PlaybackContext.PLAYLIST) {
-                                // Only reset if it's a completely different context (not search or playlist)
                                 _currentSongIndex.value = -1
                                 _isPlaying.value = false
                                 Log.d("HomeViewModel", "Different playback context ($playbackContext), resetting home state")
                             }
-                        }
-                    } else if (playbackContext != MusicService.PlaybackContext.SEARCH && 
-                              playbackContext != MusicService.PlaybackContext.PLAYLIST) {
-                        Log.d("HomeViewModel", "Playback context is not SEARCH/PLAYLIST ($playbackContext), resetting home state")
-                        // If playback context is completely different, reset our state
-                        _currentSongIndex.value = -1
-                        _isPlaying.value = false
-                    } else {
-                        Log.d("HomeViewModel", "Service current song is null")
-                        // Only reset if we're not currently playing from search
-                        if (_searchQuery.value.isBlank()) {
+                        } else if (playbackContext != MusicService.PlaybackContext.SEARCH &&
+                                  playbackContext != MusicService.PlaybackContext.PLAYLIST) {
+                            Log.d("HomeViewModel", "Playback context is not SEARCH/PLAYLIST ($playbackContext), resetting home state")
                             _currentSongIndex.value = -1
                             _isPlaying.value = false
+                        } else {
+                            Log.d("HomeViewModel", "Service current song is null")
+                            if (_searchQuery.value.isBlank()) {
+                                _currentSongIndex.value = -1
+                                _isPlaying.value = false
+                            }
                         }
                     }
                 }
-            }
-        }
-        
-        viewModelScope.launch {
-            musicService?.let { service ->
-                // Observe playing state from the service more frequently for better responsiveness
-                while (bound && musicService != null) {
-                    val isServicePlaying = service.isPlaying()
-                    val playbackContext = service.getCurrentPlaybackContext()
-                    
-                    // Update if we're in SEARCH/PLAYLIST context and there's a meaningful change
-                    if ((playbackContext == MusicService.PlaybackContext.SEARCH || 
-                         playbackContext == MusicService.PlaybackContext.PLAYLIST) &&
-                        _currentSongIndex.value >= 0 && 
-                        _isPlaying.value != isServicePlaying) {
-                        Log.d("HomeViewModel", "Service playing state changed: $isServicePlaying (was: ${_isPlaying.value}) in $playbackContext context")
-                        _isPlaying.value = isServicePlaying
-                        Log.d("HomeViewModel", "Updated isPlaying from service: $isServicePlaying")
-                    } else if (playbackContext != MusicService.PlaybackContext.SEARCH && 
-                              playbackContext != MusicService.PlaybackContext.PLAYLIST && 
-                              _isPlaying.value) {
-                        Log.d("HomeViewModel", "Playback context changed to $playbackContext, stopping home playback state")
-                        _isPlaying.value = false
-                        _currentSongIndex.value = -1
+
+                launch {
+                    combine(
+                        service.isPlayingFlow(),
+                        service.currentPlaybackContextFlow()
+                    ) { isPlaying, playbackContext ->
+                        Pair(isPlaying, playbackContext)
+                    }.collect { (isPlaying, playbackContext) ->
+                        if (playbackContext == MusicService.PlaybackContext.SEARCH ||
+                            playbackContext == MusicService.PlaybackContext.PLAYLIST) {
+                            if (_currentSongIndex.value >= 0) {
+                                _isPlaying.value = isPlaying
+                            }
+                        } else if (_isPlaying.value) {
+                            Log.d("HomeViewModel", "Playback context changed to $playbackContext, stopping home playback state")
+                            _isPlaying.value = false
+                            _currentSongIndex.value = -1
+                        }
                     }
-                    delay(500) // Check more frequently for better responsiveness
+                }
+
+                launch {
+                    combine(
+                        service.currentDurationFlow(),
+                        service.currentPositionFlow()
+                    ) { duration, position ->
+                        Pair(duration, position)
+                    }.collect { (duration, position) ->
+                        if (duration > 0) {
+                            _playbackProgress.value = position.toFloat() / duration.toFloat()
+                            Log.v("HomeViewModel", "Progress update: ${position}ms / ${duration}ms (${(_playbackProgress.value * 100).toInt()}%)")
+                        }
+                    }
                 }
             }
         }
@@ -289,29 +266,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Start progress updates when playing
-        viewModelScope.launch {
-            _isPlaying.collect { playing ->
-                Log.d("HomeViewModel", "isPlaying changed to: $playing, bound: $bound")
-                if (playing && bound) {
-                    ensureProgressUpdatesStarted()
-                } else {
-                    stopProgressUpdates()
-                }
-            }
-        }
-
-        // Periodic check to ensure progress updates are running when they should be
-        viewModelScope.launch {
-            while (true) {
-                delay(5000) // Check every 5 seconds
-                if (_isPlaying.value && bound && musicService != null && progressUpdateJob == null) {
-                    Log.w("HomeViewModel", "Progress updates should be running but aren't - restarting")
-                    ensureProgressUpdatesStarted()
-                }
-            }
-        }
-
         loadInitialData()
     }
 
@@ -344,44 +298,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun ensureProgressUpdatesStarted() {
-        if (_isPlaying.value && bound && musicService != null && progressUpdateJob == null) {
-            Log.d("HomeViewModel", "Ensuring progress updates are started")
-            startProgressUpdates()
-        }
-    }
-
-    private fun startProgressUpdates() {
-        progressUpdateJob?.cancel()
-        Log.d("HomeViewModel", "Starting progress updates, bound: $bound, musicService: ${musicService != null}")
-        progressUpdateJob = viewModelScope.launch {
-            while (true) {
-                musicService?.let { service ->
-                    val duration = service.getDuration()
-                    val position = service.getCurrentPosition()
-                    if (duration > 0) {
-                        _currentDuration.value = duration
-                        _currentPosition.value = position
-                        _playbackProgress.value = position.toFloat() / duration.toFloat()
-                        Log.v("HomeViewModel", "Progress update: ${position}ms / ${duration}ms (${(_playbackProgress.value * 100).toInt()}%)")
-                    }
-                } ?: run {
-                    Log.w("HomeViewModel", "MusicService is null during progress update")
-                }
-                delay(1000) // Update every second
-            }
-        }
-    }
-
-    private fun stopProgressUpdates() {
-        Log.d("HomeViewModel", "Stopping progress updates")
-        progressUpdateJob?.cancel()
-        progressUpdateJob = null
-    }
+    // Progress state is now driven directly by MusicService flow state.
 
     override fun onCleared() {
         super.onCleared()
-        stopProgressUpdates()
         performanceMonitor?.stopMonitoring()
         if (bound) {
             getApplication<Application>().unbindService(connection)
@@ -396,7 +316,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         currentPage = 1
         hasMorePlaylists = true
         _playlists.value = emptyList()
-        
+
         // Note: Playlists will be loaded when setUser() is called after authentication
     }
 
@@ -423,7 +343,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             Log.d("HomeViewModel", "Skipping playlist load: hasMore=$hasMorePlaylists, repository=${repository != null}, isLoading=${_isLoading.value}")
             return
         }
-        
+
         viewModelScope.launch {
             _isLoading.value = true
             try {
@@ -462,7 +382,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSearchAndStopPlayback() {
         // Clear search
         _searchQuery.value = ""
-        
+
         // Stop playback if playing
         if (_isPlaying.value) {
             val ctx = getApplication<Application>()
@@ -472,16 +392,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             ctx.startService(intent)
             _isPlaying.value = false
         }
-        
+
         // Reset playback state
         _currentSongIndex.value = -1
         _playbackProgress.value = 0f
-        _currentPosition.value = 0L
-        _currentDuration.value = 0L
-        
-        // Stop progress updates
-        stopProgressUpdates()
-        
+
         Log.d("HomeViewModel", "Cleared search and stopped playback")
     }
 
@@ -493,7 +408,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _isLoading.value = true
             try {
                 val selectedArtistId = _selectedArtist.value?.id?.toString()
-                
+
                 // Only perform search when query is not blank
                 if (query.isNotBlank()) {
                     // Use appropriate search method based on artist filter
@@ -530,6 +445,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error searching songs", e)
                 _isLoading.value = false
             }
         }
@@ -547,7 +463,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun setUser(user: User) {
         Log.d("HomeViewModel", "Setting user: ${user.username}")
         _user.value = user
-        
+
         // Load playlists when user is set (after authentication)
         // Artists will be loaded on-demand when user searches
         if (repository != null) {
@@ -563,15 +479,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("HomeViewModel", "Total songs in search results: ${songs.value.size}")
         Log.d("HomeViewModel", "Current search query: '${_searchQuery.value}'")
         Log.d("HomeViewModel", "Current bound state: $bound")
-        
+
         if (index != -1) {
             Log.d("HomeViewModel", "Setting state - currentSongIndex: $index, isPlaying: true")
             _currentSongIndex.value = index
             _isPlaying.value = true
             _currentPlayingSong.value = song  // Store the currently playing song
-            
+
             Log.d("HomeViewModel", "State after setting - currentSongIndex: ${_currentSongIndex.value}, isPlaying: ${_isPlaying.value}")
-            
+
             val ctx = getApplication<Application>()
             // If we have search results, set them as the queue with search context
             if (songs.value.isNotEmpty() && _searchQuery.value.isNotBlank()) {
@@ -595,14 +511,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 ctx.startService(intent)
             }
-            
-            // Ensure progress updates start (will work immediately if bound, or later when service connects)
-            ensureProgressUpdatesStarted()
-            
+
             // Add a verification mechanism to ensure state is correct after a short delay
             viewModelScope.launch {
                     delay(1000) // Wait 1 second for service to process
-                    
+
                     // Verify that our state is still correct
                     if (_currentSongIndex.value == index && _isPlaying.value) {
                         Log.d("HomeViewModel", "State verification: OK - index: $index, playing: true")
@@ -613,7 +526,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _isPlaying.value = true
                         Log.d("HomeViewModel", "Forced state correction")
                     }
-                    
+
                     // Also verify service state if bound
                     if (bound && musicService != null) {
                         val serviceIsPlaying = musicService!!.isPlaying()
@@ -623,15 +536,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
-                
-                // If service is not bound yet, retry after a delay
-                if (!bound) {
-                    Log.d("HomeViewModel", "Service not bound yet, will retry progress updates")
-                    viewModelScope.launch {
-                        delay(500)
-                        ensureProgressUpdatesStarted()
-                    }
-                }
+
         } else {
             Log.e("HomeViewModel", "Song not found in search results!")
         }
@@ -669,7 +574,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
             ctx.startService(intent)
         }
-        
+
         // Clear all data
         _user.value = null
         _playlists.value = emptyList()
@@ -685,17 +590,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _currentSongIndex.value = -1
         _isPlaying.value = false
         _playbackProgress.value = 0f
-        _currentPosition.value = 0L
-        _currentDuration.value = 0L
         _isLoading.value = false
-        
+
         // Reset album/artist view states to return to normal playlist view
         _albums.value = emptyList()
         _isAlbumsLoading.value = false
         _showAlbums.value = false
         _selectedAlbum.value = null
         _showAlbumSongs.value = false
-        
+
         // Reset pagination
         currentPage = 1
         hasMorePlaylists = true
@@ -703,24 +606,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         currentSearchPage = 1
         currentArtistPage = 1
         hasMoreArtists = true
-        
-        // Stop progress updates
-        stopProgressUpdates()
-        
+
         // Clear repository
         repository = null
-        
-        Log.d("HomeViewModel", "Logout completed - all data cleared")
-    }
 
-    fun clearSearch() {
-        _searchQuery.value = ""
-        _songs.value = emptyList()
-        _totalSearchResults.value = 0
-        _currentPageStart.value = 0
-        _currentPageEnd.value = 0
-        currentSearchPage = 1
-        hasMoreSongs = true
+        Log.d("HomeViewModel", "Logout completed - all data cleared")
     }
 
     fun favoriteSong(song: Song, newStarredValue: Boolean) {
@@ -729,7 +619,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 Log.d("HomeViewModel", "favoriteSong called: songId=${song.id}, newStarredValue=$newStarredValue")
                 val success = repository?.favoriteSong(song.id.toString(), newStarredValue) ?: false
                 Log.d("HomeViewModel", "favoriteSong API result: success=$success")
-                
+
                 if (success) {
                     // Update the song in the current list
                     val updatedSongs = _songs.value.map { currentSong ->
@@ -741,10 +631,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     _songs.value = updatedSongs
                     Log.d("HomeViewModel", "Updated song list, new size: ${updatedSongs.size}")
-                    
+
                     // Refresh playlists since favorite status changes may affect playlist details
                     refreshPlaylists()
-                    
+
                     // Show success toast
                     val ctx = getApplication<Application>()
                     val message = if (newStarredValue) "Favorited Song" else "Un-favorited Song"
@@ -765,30 +655,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearQueue() {
-        Log.d("HomeViewModel", "Clearing queue")
-        val ctx = getApplication<Application>()
-        val intent = Intent(ctx, MusicService::class.java).apply {
-            action = MusicService.ACTION_CLEAR_QUEUE
-        }
-        ctx.startService(intent)
-        
-        // Clear local playback state
-        _currentSongIndex.value = -1
-        _isPlaying.value = false
-        _playbackProgress.value = 0f
-        _currentPosition.value = 0L
-        _currentDuration.value = 0L
-        
-        // Stop progress updates
-        stopProgressUpdates()
-        
-        Log.d("HomeViewModel", "Queue cleared")
-    }
-
     private fun performArtistSearch(query: String) {
         if (repository == null) return
-        
+
         viewModelScope.launch {
             _isArtistLoading.value = true
             try {
@@ -814,25 +683,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectArtist(artist: Artist?) {
         _selectedArtist.value = artist
-        
+
         // Clear current songs and reset pagination
         _songs.value = emptyList()
         currentSearchPage = 1
         hasMoreSongs = true
-        
+
         // Clear album view states when artist changes
         _albums.value = emptyList()
         _isAlbumsLoading.value = false
         _showAlbums.value = false
         _selectedAlbum.value = null
         _showAlbumSongs.value = false
-        
+
         // If artist is being cleared (set to null), clear the artist results but keep search capability
         if (artist == null) {
             _artists.value = emptyList()
             _isArtistLoading.value = false
         }
-        
+
         // When artist is selected with existing search text: Re-filter with artist constraint
         if (artist != null && _searchQuery.value.isNotBlank()) {
             performSearch(_searchQuery.value)
@@ -854,11 +723,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun browseArtistAlbums() {
         val artist = _selectedArtist.value ?: return
-        
+
         _showAlbums.value = true
         _albums.value = emptyList()
         _isAlbumsLoading.value = true
-        
+
         viewModelScope.launch {
             try {
                 repository?.getArtistAlbums(artist.id.toString(), 1)
@@ -893,7 +762,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _showAlbumSongs.value = true
         _showAlbums.value = false
         _songs.value = emptyList()
-        
+
         viewModelScope.launch {
             try {
                 _isLoading.value = true
@@ -935,7 +804,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             _currentSongIndex.value = 0
                             _isPlaying.value = true
                             _currentPlayingSong.value = albumSongs.first()
-                            
+
                             val ctx = getApplication<Application>()
                             Log.d("HomeViewModel", "Playing album: ${album.name} with ${albumSongs.size} songs")
                             val service = musicService
@@ -958,17 +827,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun browseArtistSongs() {
         val artist = _selectedArtist.value ?: return
-        
+
         // Clear current songs and search
         _songs.value = emptyList()
         _searchQuery.value = ""
         currentSearchPage = 1
         hasMoreSongs = true
-        
+
         // Hide albums view to show songs
         _showAlbums.value = false
         _showAlbumSongs.value = false
-        
+
         // Load all songs for this artist
         viewModelScope.launch {
             try {

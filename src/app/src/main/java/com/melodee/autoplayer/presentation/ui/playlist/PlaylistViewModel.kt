@@ -1,15 +1,12 @@
 package com.melodee.autoplayer.presentation.ui.playlist
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.IBinder
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.melodee.autoplayer.data.repository.MusicRepository
@@ -18,10 +15,9 @@ import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.service.MusicService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.Job
 import android.util.Log
 
+@SuppressLint("StaticFieldLeak")
 class PlaylistViewModel(application: Application) : AndroidViewModel(application) {
     private var repository: MusicRepository? = null
     private var context: Context? = null
@@ -34,19 +30,14 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             bound = true
-            
+
             // Start observing service state
             observeServiceState()
-            
-            if (isPlaying.value) {
-                startProgressUpdates()
-            }
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
             musicService = null
             bound = false
-            stopProgressUpdates()
         }
     }
 
@@ -62,7 +53,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             this.context!!.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }
     }
-    
+
     fun setOnPlaylistsNeedRefresh(callback: () -> Unit) {
         onPlaylistsNeedRefresh = callback
     }
@@ -79,12 +70,6 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
 
-    private val _currentDuration = MutableStateFlow(0L)
-    val currentDuration: StateFlow<Long> = _currentDuration.asStateFlow()
-
-    private val _currentPosition = MutableStateFlow(0L)
-    val currentPosition: StateFlow<Long> = _currentPosition.asStateFlow()
-
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -93,17 +78,15 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
 
     private val _shouldScrollToTop = MutableStateFlow(false)
     val shouldScrollToTop: StateFlow<Boolean> = _shouldScrollToTop.asStateFlow()
-    
+
     private val _totalSongs = MutableStateFlow(0)
     val totalSongs: StateFlow<Int> = _totalSongs.asStateFlow()
-    
+
     private val _currentSongsStart = MutableStateFlow(0)
     val currentSongsStart: StateFlow<Int> = _currentSongsStart.asStateFlow()
-    
+
     private val _currentSongsEnd = MutableStateFlow(0)
     val currentSongsEnd: StateFlow<Int> = _currentSongsEnd.asStateFlow()
-
-    private var progressUpdateJob: Job? = null
 
     private var currentPage = 1
     private var hasMoreSongs = true
@@ -120,98 +103,48 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    init {
-        // Start progress updates when playing
-        viewModelScope.launch {
-            _isPlaying.collect { playing ->
-                if (playing && bound) {
-                    startProgressUpdates()
-                } else {
-                    stopProgressUpdates()
-                }
-            }
-        }
-    }
-
-    private fun hasMediaControlPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context ?: return false,
-                Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true // Permission not required for older Android versions
-        }
-    }
-
-    private fun startProgressUpdates() {
-        progressUpdateJob?.cancel()
-        progressUpdateJob = viewModelScope.launch {
-            while (true) {
-                musicService?.let { service ->
-                    val duration = service.getDuration()
-                    val position = service.getCurrentPosition()
-                    if (duration > 0) {
-                        _currentDuration.value = duration
-                        _currentPosition.value = position
-                        _playbackProgress.value = position.toFloat() / duration.toFloat()
-                    }
-                }
-                delay(1000) // Update every second
-            }
-        }
-    }
-
-    private fun stopProgressUpdates() {
-        progressUpdateJob?.cancel()
-        progressUpdateJob = null
-    }
-
     private fun observeServiceState() {
         viewModelScope.launch {
             musicService?.let { service ->
-                // Observe playlist manager state to track current song changes
-                service.getPlaylistManager().currentSong.collect { song ->
-                    Log.d("PlaylistViewModel", "Service current song updated: ${song?.title}")
-                    
-                    // Check if the current playback context is PLAYLIST
-                    val playbackContext = service.getCurrentPlaybackContext()
-                    Log.d("PlaylistViewModel", "Current playback context: $playbackContext")
-                    
-                    if (song != null && playbackContext == MusicService.PlaybackContext.PLAYLIST && _songs.value.contains(song)) {
-                        // Only update if the song is in our current playlist and context is PLAYLIST
-                        Log.d("PlaylistViewModel", "Setting current song: ${song.title} (PLAYLIST context)")
-                        _currentSong.value = song
-                        _isPlaying.value = service.isPlaying()
-                    } else if (playbackContext != MusicService.PlaybackContext.PLAYLIST) {
-                        Log.d("PlaylistViewModel", "Playback context is not PLAYLIST ($playbackContext), resetting playlist state")
-                        // If playback context is not PLAYLIST, reset our state
-                        _currentSong.value = null
-                        _isPlaying.value = false
+                launch {
+                    service.currentSongFlow().collect { song ->
+                        Log.d("PlaylistViewModel", "Service current song updated: ${song?.title}")
+                        val playbackContext = service.getCurrentPlaybackContext()
+                        Log.d("PlaylistViewModel", "Current playback context: $playbackContext")
+
+                        if (song != null && playbackContext == MusicService.PlaybackContext.PLAYLIST && _songs.value.contains(song)) {
+                            Log.d("PlaylistViewModel", "Setting current song: ${song.title} (PLAYLIST context)")
+                            _currentSong.value = song
+                        } else if (playbackContext != MusicService.PlaybackContext.PLAYLIST) {
+                            Log.d("PlaylistViewModel", "Playback context is not PLAYLIST ($playbackContext), resetting playlist state")
+                            _currentSong.value = null
+                            _isPlaying.value = false
+                        }
                     }
                 }
-            }
-        }
-        
-        viewModelScope.launch {
-            musicService?.let { service ->
-                // Observe playing state from the service
-                while (bound && musicService != null) {
-                    val isServicePlaying = service.isPlaying()
-                    val playbackContext = service.getCurrentPlaybackContext()
-                    
-                    // Only update if we're in PLAYLIST context and there's a meaningful change
-                    if (playbackContext == MusicService.PlaybackContext.PLAYLIST && 
-                        _currentSong.value != null && 
-                        _isPlaying.value != isServicePlaying) {
-                        Log.d("PlaylistViewModel", "Service playing state changed: $isServicePlaying (was: ${_isPlaying.value}) in PLAYLIST context")
-                        _isPlaying.value = isServicePlaying
-                    } else if (playbackContext != MusicService.PlaybackContext.PLAYLIST && _isPlaying.value) {
-                        Log.d("PlaylistViewModel", "Playback context changed from PLAYLIST to $playbackContext, stopping playlist playback state")
-                        _isPlaying.value = false
-                        _currentSong.value = null
+
+                launch {
+                    combine(service.isPlayingFlow(), service.currentPlaybackContextFlow()) { isPlaying, playbackContext ->
+                        Pair(isPlaying, playbackContext)
+                    }.collect { (isPlaying, playbackContext) ->
+                        if (playbackContext == MusicService.PlaybackContext.PLAYLIST && _currentSong.value != null) {
+                            _isPlaying.value = isPlaying
+                        } else if (playbackContext != MusicService.PlaybackContext.PLAYLIST && _isPlaying.value) {
+                            Log.d("PlaylistViewModel", "Playback context changed from PLAYLIST to $playbackContext, stopping playlist playback state")
+                            _isPlaying.value = false
+                            _currentSong.value = null
+                        }
                     }
-                    delay(1000) // Check every second
+                }
+
+                launch {
+                    combine(service.currentDurationFlow(), service.currentPositionFlow()) { duration, position ->
+                        Pair(duration, position)
+                    }.collect { (duration, position) ->
+                        if (duration > 0) {
+                            _playbackProgress.value = position.toFloat() / duration.toFloat()
+                        }
+                    }
                 }
             }
         }
@@ -219,33 +152,29 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
-        stopProgressUpdates()
         if (bound) {
             getApplication<Application>().unbindService(connection)
             bound = false
         }
     }
 
-    val playlistName: String
-        get() = _playlist.value?.name ?: ""
-
     fun loadPlaylist(playlistId: String, allowPagination: Boolean = false) {
         // Check if this is a different playlist than what's currently playing
         val isNewPlaylist = playlistId != currentPlaylistId
-        
+
         // If it's the same playlist and we already have songs loaded, don't reload
-        if (playlistId == currentPlaylistId && _songs.value.isNotEmpty() && !isNewPlaylist && !allowPagination) {
+        if (playlistId == currentPlaylistId && _songs.value.isNotEmpty() && !allowPagination) {
             Log.d("PlaylistViewModel", "Playlist $playlistId already loaded, skipping reload")
             return
         }
-        
+
         // Don't auto-play when returning to an already loaded playlist
         // This prevents restarting music when user navigates back from full-screen player
         if (playlistId == currentPlaylistId && !hasMoreSongs && _songs.value.isNotEmpty()) {
             Log.d("PlaylistViewModel", "Same playlist already loaded with no more songs, skipping auto-play")
             return
         }
-        
+
         // Reset pagination state for new playlist
         if (isNewPlaylist) {
             currentPage = 1
@@ -254,7 +183,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             _songs.value = emptyList()
             isRefreshing = false // Reset refresh state for new playlist
         }
-        
+
         currentPlaylistId = playlistId
         viewModelScope.launch {
             _isLoading.value = true
@@ -283,7 +212,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                         hasMoreSongs = response.meta.hasNext
                         currentPlaylistPageSize = response.meta.pageSize.coerceAtLeast(1)
                         currentPage = response.meta.currentPage + 1
-                        
+
                         // Update pagination display values
                         _totalSongs.value = response.meta.totalCount
                         if (response.meta.currentPage == 1) {
@@ -294,13 +223,13 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                             _currentSongsStart.value = prevEnd + 1
                             _currentSongsEnd.value = prevEnd + response.data.size
                         }
-                        
+
                         // If this was a refresh and we have songs, trigger scroll to top
                         if (isRefreshing && response.data.isNotEmpty() && currentPage == 2) {
                             _shouldScrollToTop.value = true
                             isRefreshing = false
                         }
-                        
+
                         // Auto-play the first song when loading a NEW playlist or after a manual refresh
                         if (response.data.isNotEmpty() && (isNewPlaylist || autoPlayAfterRefresh)) {
                             Log.d("PlaylistViewModel", "Auto-playing first song of new playlist: $playlistId")
@@ -360,7 +289,7 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                 Log.d("PlaylistViewModel", "favoriteSong called: songId=${song.id}, newStarredValue=$newStarredValue")
                 val success = repository?.favoriteSong(song.id.toString(), newStarredValue) ?: false
                 Log.d("PlaylistViewModel", "favoriteSong API result: success=$success")
-                
+
                 if (success) {
                     // Update the song in the current list
                     val updatedSongs = _songs.value.map { currentSong ->
@@ -372,15 +301,15 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                     }
                     _songs.value = updatedSongs
                     Log.d("PlaylistViewModel", "Updated song list, new size: ${updatedSongs.size}")
-                    
+
                     // Refresh the current playlist since favorite status changes may affect playlist details
                     currentPlaylistId?.let { playlistId ->
                         refreshPlaylistDetails(playlistId)
                     }
-                    
+
                     // Notify home page that playlists need to be refreshed
                     onPlaylistsNeedRefresh?.invoke()
-                    
+
                     // Show success toast
                     context?.let { ctx ->
                         val message = if (newStarredValue) "Favorited Song" else "Un-favorited Song"
@@ -525,10 +454,6 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updatePlaybackProgress(progress: Float) {
-        _playbackProgress.value = progress
-    }
-
     fun logout() {
         // Stop any playing music
         if (_isPlaying.value) {
@@ -539,27 +464,22 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
                 ctx.startService(intent)
             }
         }
-        
+
         // Clear all data
         _playlist.value = null
         _songs.value = emptyList()
         _currentSong.value = null
         _playbackProgress.value = 0f
-        _currentDuration.value = 0L
-        _currentPosition.value = 0L
         _isLoading.value = false
         _isPlaying.value = false
-        
+
         // Reset pagination
         currentPage = 1
         hasMoreSongs = true
         currentPlaylistPageSize = 50
         currentPlaylistId = null
-        
-        // Stop progress updates
-        stopProgressUpdates()
-        
+
         // Clear repository
         repository = null
     }
-} 
+}

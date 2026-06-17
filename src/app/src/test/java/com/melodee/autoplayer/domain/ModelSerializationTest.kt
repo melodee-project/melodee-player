@@ -12,6 +12,7 @@ import com.melodee.autoplayer.data.api.ScrobbleRequest
 import com.melodee.autoplayer.data.api.ScrobbleRequestType
 import com.melodee.autoplayer.domain.model.Album
 import com.melodee.autoplayer.domain.model.Artist
+import com.melodee.autoplayer.domain.model.AuthenticationResponse
 import com.melodee.autoplayer.domain.model.PaginationMetadata
 import com.melodee.autoplayer.domain.model.Song
 import com.melodee.autoplayer.domain.model.SongPagedResponse
@@ -41,9 +42,9 @@ class ModelSerializationTest {
                     } else {
                         UUID.fromString(str)
                     }
-                } catch (e: IllegalArgumentException) {
+                } catch (_: IllegalArgumentException) {
                     UUID(0, 0)
-                } catch (e: IllegalStateException) {
+                } catch (_: IllegalStateException) {
                     UUID(0, 0)
                 }
             }
@@ -168,6 +169,36 @@ class ModelSerializationTest {
     }
 
     @Test
+    fun artist_genres_deserializes_and_serializes_as_string_array() {
+        val json = """
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "thumbnailUrl": "",
+              "imageUrl": "",
+              "name": "Artist",
+              "userStarred": false,
+              "userRating": 0,
+              "albumCount": 0,
+              "songCount": 0,
+              "createdAt": "",
+              "updatedAt": "",
+              "genres": ["rock", "jazz"]
+            }
+        """.trimIndent()
+
+        val artist = gson.fromJson(json, Artist::class.java)
+
+        assertThat(artist.genres).containsExactly("rock", "jazz")
+
+        val serialized = JsonParser.parseString(gson.toJson(artist)).asJsonObject
+        val genres = serialized.getAsJsonArray("genres")
+
+        assertThat(genres.size()).isEqualTo(2)
+        assertThat(genres[0].asString).isEqualTo("rock")
+        assertThat(genres[1].asString).isEqualTo("jazz")
+    }
+
+    @Test
     fun paged_response_serializes_with_metadata() {
         val meta = PaginationMetadata(
             totalCount = 1,
@@ -230,6 +261,43 @@ class ModelSerializationTest {
     }
 
     @Test
+    fun `authentication response preserves nullable refresh token fields`() {
+        val json = """
+            {
+              "token": "access",
+              "serverVersion": "1.2.0",
+              "expiresAt": "2024-01-01T00:00:00Z",
+              "refreshToken": null,
+              "refreshTokenExpiresAt": null,
+              "user": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "thumbnailUrl": "",
+                "imageUrl": "",
+                "username": "tester",
+                "email": "tester@example.com",
+                "isAdmin": false,
+                "isEditor": false,
+                "roles": [],
+                "songsPlayed": 0,
+                "artistsLiked": 0,
+                "artistsDisliked": 0,
+                "albumsLiked": 0,
+                "albumsDisliked": 0,
+                "songsLiked": 0,
+                "songsDisliked": 0,
+                "createdAt": "",
+                "updatedAt": ""
+              }
+            }
+        """.trimIndent()
+
+        val response = gson.fromJson(json, AuthenticationResponse::class.java)
+
+        assertThat(response.refreshToken).isNull()
+        assertThat(response.refreshTokenExpiresAt).isNull()
+    }
+
+    @Test
     fun song_parcelable_round_trip_preserves_new_fields() {
         val artist = Artist(
             id = UUID.fromString("01010101-0101-0101-0101-010101010101"),
@@ -286,7 +354,7 @@ class ModelSerializationTest {
         song.writeToParcel(parcel, 0)
         parcel.setDataPosition(0)
 
-        val restored = Song.CREATOR.createFromParcel(parcel)
+        val restored = Song.createFromParcel(parcel)
         parcel.recycle()
 
         assertThat(restored).isEqualTo(song)

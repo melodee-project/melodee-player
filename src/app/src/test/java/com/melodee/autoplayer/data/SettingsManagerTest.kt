@@ -72,4 +72,31 @@ class SettingsManagerTest {
         assertThat(settings.refreshToken).isEmpty()
         assertThat(settings.refreshTokenExpiresAt).isEmpty()
     }
+
+    @Test
+    fun saveAuthenticationData_preservesRefreshExpiryForSameUserWhenRefreshTokenIsOmitted() {
+        val settings = SettingsManager(context)
+
+        settings.saveAuthenticationData(
+            token = "access-1",
+            userId = "user-1",
+            userEmail = "user@example.com",
+            username = "user",
+            serverUrl = "https://server.example/",
+            refreshToken = "refresh-1",
+            refreshTokenExpiresAt = "2030-01-01T00:00:00Z"
+        )
+
+        settings.saveAuthenticationData(
+            token = "access-2",
+            userId = "user-1",
+            userEmail = "user@example.com",
+            username = "user",
+            serverUrl = "https://server.example/"
+        )
+
+        assertThat(settings.authToken).isEqualTo("access-2")
+        assertThat(settings.refreshToken).isEqualTo("refresh-1")
+        assertThat(settings.refreshTokenExpiresAt).isEqualTo("2030-01-01T00:00:00Z")
+    }
 }

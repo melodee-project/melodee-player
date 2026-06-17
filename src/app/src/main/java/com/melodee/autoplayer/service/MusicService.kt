@@ -7,7 +7,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -26,8 +25,10 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.media.MediaBrowserServiceCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Player.PositionInfo
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.common.PlaybackException
 import com.melodee.autoplayer.R
@@ -41,6 +42,7 @@ import com.melodee.autoplayer.data.api.NetworkModule
 import com.melodee.autoplayer.MelodeeApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.StateFlow
 
 import android.provider.MediaStore
 
@@ -115,10 +117,6 @@ class MusicService : MediaBrowserServiceCompat() {
         const val EXTRA_START_SONG_ID = "START_SONG_ID"
 
         private const val DEFAULT_PLAYLIST_PAGE_SIZE = 50
-        private val TRUSTED_ANDROID_AUTO_PACKAGES = setOf(
-            "com.google.android.projection.gearhead",
-            "com.google.android.gms"
-        )
     }
 
     inner class MusicBinder : Binder() {
@@ -210,9 +208,7 @@ class MusicService : MediaBrowserServiceCompat() {
         
         // Check if the client is Android Auto
         val isAndroidAuto = rootHints?.getBoolean("android.service.media.extra.RECENT") == true ||
-                          clientPackageName in TRUSTED_ANDROID_AUTO_PACKAGES ||
-                          clientPackageName.contains("android.auto") ||
-                          clientPackageName.contains("gearhead")
+                          AndroidAutoBrowserClientValidator.isTrustedAndroidAutoPackageName(clientPackageName)
         
         Log.d("MusicService", "Is Android Auto client: $isAndroidAuto (package: $clientPackageName)")
         
@@ -252,16 +248,14 @@ class MusicService : MediaBrowserServiceCompat() {
             return true
         }
 
-        if (clientPackageName in TRUSTED_ANDROID_AUTO_PACKAGES ||
-            clientPackageName.contains("android.auto") ||
-            clientPackageName.contains("gearhead")) {
+        if (AndroidAutoBrowserClientValidator.isTrustedAndroidAutoPackageName(clientPackageName)) {
             return true
         }
 
         val clientInfo = try {
             @Suppress("DEPRECATION")
             packageManager.getApplicationInfo(clientPackageName, 0)
-        } catch (e: PackageManager.NameNotFoundException) {
+        } catch (_: PackageManager.NameNotFoundException) {
             Log.w("MusicService", "Browser client package not found: $clientPackageName")
             return false
         }
@@ -335,7 +329,7 @@ class MusicService : MediaBrowserServiceCompat() {
                     .setMediaId(MEDIA_PLAYLISTS_ID)
                     .setTitle("Playlists")
                     .setSubtitle("Browse your playlists")
-                    .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_playlist_music}"))
+                    .setIconUri("android.resource://$packageName/${R.drawable.ic_playlist_music}".toUri())
                     .build(),
                 MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
             )
@@ -348,7 +342,7 @@ class MusicService : MediaBrowserServiceCompat() {
                     .setMediaId(MEDIA_QUEUE_ID)
                     .setTitle("Current Queue")
                     .setSubtitle("Currently playing songs")
-                    .setIconUri(android.net.Uri.parse("android.resource://$packageName/${R.drawable.ic_library_music}"))
+                    .setIconUri("android.resource://$packageName/${R.drawable.ic_library_music}".toUri())
                     .build(),
                 MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
             )
@@ -397,10 +391,8 @@ class MusicService : MediaBrowserServiceCompat() {
                                     .setSubtitle("${playlist.songCount} songs")
                                     .setDescription(playlist.description)
                                     .setIconUri(
-                                        android.net.Uri.parse(
-                                            playlist.imageUrl.takeIf { it.isNotBlank() }
-                                                ?: "android.resource://$packageName/${R.drawable.ic_playlist_music}"
-                                        )
+                                        (playlist.imageUrl.takeIf { it.isNotBlank() }
+                                            ?: "android.resource://$packageName/${R.drawable.ic_playlist_music}").toUri()
                                     )
                                     .build(),
                                 MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
@@ -819,7 +811,7 @@ class MusicService : MediaBrowserServiceCompat() {
             .setTitle(song.title)
             .setSubtitle(song.artist.name)
             .setDescription(song.album.name)
-            .setIconUri(android.net.Uri.parse(song.thumbnailUrl))
+            .setIconUri(song.thumbnailUrl.toUri())
         
         // Add context extras
         val extras = Bundle()
@@ -1055,7 +1047,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 setShowBadge(false)
             }
             
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
     }
@@ -1305,8 +1297,8 @@ class MusicService : MediaBrowserServiceCompat() {
                 }
 
                 override fun onPositionDiscontinuity(
-                    oldPosition: androidx.media3.common.Player.PositionInfo,
-                    newPosition: androidx.media3.common.Player.PositionInfo,
+                    oldPosition: PositionInfo,
+                    newPosition: PositionInfo,
                     reason: Int
                 ) {
                     // Update scrobble manager with current position for seeking
@@ -1671,21 +1663,27 @@ class MusicService : MediaBrowserServiceCompat() {
     }
 
     // Public methods for UI binding
+    fun isPlayingFlow(): StateFlow<Boolean> = playbackManager.isPlaying
+
+    fun currentPositionFlow(): StateFlow<Long> = playbackManager.currentPosition
+
+    fun currentDurationFlow(): StateFlow<Long> = playbackManager.currentDuration
+
+    fun currentSongFlow(): StateFlow<Song?> = playbackManager.currentSong
+
+    fun currentPlaybackContextFlow(): kotlinx.coroutines.flow.Flow<PlaybackContext> {
+        return playbackManager.playbackContext.map { context ->
+            when (context) {
+                MusicPlaybackManager.PlaybackContext.PLAYLIST -> PlaybackContext.PLAYLIST
+                MusicPlaybackManager.PlaybackContext.SEARCH -> PlaybackContext.SEARCH
+                MusicPlaybackManager.PlaybackContext.SINGLE_SONG -> PlaybackContext.SINGLE_SONG
+            }
+        }
+    }
+
     fun pause() {
         Log.d("MusicService", "Pause called")
         player?.pause()
-        updateMediaSessionPlaybackState()
-    }
-
-    fun resume() {
-        Log.d("MusicService", "Resume called")
-        player?.play()
-        updateMediaSessionPlaybackState()
-    }
-
-    fun stop() {
-        Log.d("MusicService", "Stop called")
-        player?.stop()
         updateMediaSessionPlaybackState()
     }
 
@@ -1714,10 +1712,6 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    // Removed duplicate getters - using adapters at bottom of file
-
-    fun getCurrentSong(): Song? = currentSong
-    
     fun getCurrentPlaybackContext(): PlaybackContext = when (playbackManager.playbackContext.value) {
         MusicPlaybackManager.PlaybackContext.PLAYLIST -> PlaybackContext.PLAYLIST
         MusicPlaybackManager.PlaybackContext.SEARCH -> PlaybackContext.SEARCH
@@ -1852,7 +1846,10 @@ class MusicService : MediaBrowserServiceCompat() {
                 Log.d("MusicService", "MediaSession onSetShuffleMode: $shuffleMode")
                 when (shuffleMode) {
                     PlaybackStateCompat.SHUFFLE_MODE_ALL -> queueManager().setShuffle(true)
+                    PlaybackStateCompat.SHUFFLE_MODE_GROUP -> queueManager().setShuffle(true)
                     PlaybackStateCompat.SHUFFLE_MODE_NONE -> queueManager().setShuffle(false)
+                    PlaybackStateCompat.SHUFFLE_MODE_INVALID -> Unit
+                    else -> Unit
                 }
                 updateMediaSessionPlaybackState()
             }
@@ -2230,6 +2227,7 @@ class MusicService : MediaBrowserServiceCompat() {
                 currentSong?.let { song ->
                     val currentPos = player?.currentPosition ?: 0
                     val duration = player?.duration ?: 0
+                    playbackManager.updateProgress(currentPos, duration)
                     if (duration > 0) {
                         scrobbleManager?.updatePlaybackPosition(song.id.toString(), currentPos, duration)
                     }
@@ -2260,25 +2258,8 @@ class MusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    // Debug method - can be called during development
-    fun testSearchFunctionality(query: String = "test") {
-        Log.i("MusicService", "=== Testing Search Functionality ===")
-        serviceScope.launch {
-            try {
-                val results = performApiSearch(query)
-                Log.i("MusicService", "Test search returned ${results.size} results")
-                results.forEach { item ->
-                    val desc = item.description
-                    Log.i("MusicService", "Result: ${desc.title} - ${desc.subtitle}")
-                }
-            } catch (e: Exception) {
-                Log.e("MusicService", "Test search failed", e)
-            }
-        }
-    }
-
     private fun setupAudioManager() {
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         Log.d("MusicService", "AudioManager initialized")
     }
 
@@ -2608,23 +2589,6 @@ class MusicService : MediaBrowserServiceCompat() {
         return finalResult
     }
 
-    private fun clearExpiredSearchCache() {
-        val cacheExpirationMs = 10 * 60 * 1000L // 10 minutes
-        val currentTime = System.currentTimeMillis()
-        
-        if (searchResultsCache.isNotEmpty() && (currentTime - searchResultsCacheTime) > cacheExpirationMs) {
-            Log.d("MusicService", "Search cache expired, clearing it")
-            searchResultsCache = emptyList()
-            searchResultsCacheTime = 0
-        }
-    }
-    
-    private fun clearSearchCache() {
-        Log.d("MusicService", "Manually clearing search cache")
-        searchResultsCache = emptyList()
-        searchResultsCacheTime = 0
-    }
-
     private fun notifyQueueChanged() {
         // Notify Android Auto that the Current Queue content has changed
         Log.d("MusicService", "Notifying Android Auto that queue has changed")
@@ -2729,8 +2693,6 @@ class MusicService : MediaBrowserServiceCompat() {
         
         fun clearQueue() = playbackManager.clearQueue()
         
-        fun getQueueSize() = playbackManager.currentQueue.value.size
-        
         fun skipToNext() = playbackManager.moveToNext()
         
         fun skipToPrevious() = playbackManager.moveToPrevious()
@@ -2782,13 +2744,6 @@ class MusicService : MediaBrowserServiceCompat() {
             } else false
         }
         
-        fun removeFromQueue(song: Song) {
-            val currentList = playbackManager.currentQueue.value.toMutableList()
-            currentList.remove(song)
-            val currentIndex = playbackManager.currentIndex.value
-            playbackManager.setQueue(currentList, if (currentIndex >= currentList.size) 0 else currentIndex)
-        }
-        
         fun removeFromQueue(index: Int) {
             val currentList = playbackManager.currentQueue.value.toMutableList()
             if (index in currentList.indices) {
@@ -2801,7 +2756,6 @@ class MusicService : MediaBrowserServiceCompat() {
     
     inner class PlaylistManagerAdapter {
         val currentPlaylist get() = playbackManager.currentQueue
-        val currentIndex get() = playbackManager.currentIndex
         val currentSong get() = playbackManager.currentSong
         
         fun setPlaylist(songs: List<Song>, startIndex: Int = 0) {

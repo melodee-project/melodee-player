@@ -27,6 +27,17 @@ This file records notable project changes. It follows the
   service before exposing browse content.
 - Added debug-symbol keep rules for native libraries used by AndroidX graphics,
   benchmark, DataStore, and tracing dependencies.
+- Added focused authentication persistence tests for omitted refresh-token
+  responses, refresh-token expiry retention, transient refresh failures, invalid
+  refresh failures, and Android Auto service-side authentication restoration.
+- Added OpenAPI v1 contract tests covering authentication, refresh-token
+  requests, playlist and favorite route placeholders, scrobble payloads and
+  error responses, nullable refresh-token fields, and artist genre arrays.
+- Added repository instructions for coding agents requiring changelog updates
+  for notable code, behavior, dependency, security, and documentation changes.
+- Added project-specific coding-agent guidance for nested Gradle usage,
+  validation, authentication, API contracts, Android Auto, playback, and
+  documentation expectations.
 
 ### Changed
 
@@ -57,6 +68,17 @@ This file records notable project changes. It follows the
   SDK 36, JDK 21, Gradle 9.5.1, and dependency-version changes.
 - Updated the benchmark module to compile and target SDK 36 with the same JDK
   21 toolchain configuration as the app module.
+- Updated `HomeViewModel` and `PlaylistViewModel` to collect playback state,
+  current song, playback context, duration, and position from service-backed
+  flows instead of running UI-owned polling loops.
+- Updated `MusicService` and `MusicPlaybackManager` to expose and maintain
+  flow-backed playback progress for bound UI consumers.
+- Updated the README to document current setup, API v1 authentication behavior,
+  Android Auto behavior, testing commands, and repository layout.
+- Cleaned Android Studio commit-inspection warnings in playback, playlist,
+  home, service, and model serialization code by removing dead helpers,
+  simplifying redundant conditions, and keeping only intentional Android
+  lifecycle suppressions.
 
 ### Fixed
 
@@ -84,3 +106,5 @@ This file records notable project changes. It follows the
   disabling OkHttp body logging.
 - Kept the media browser service exported for Android Auto discovery while
   adding caller checks before returning a browser root.
+- Tightened Android Auto media browser caller classification by replacing
+  package-name substring trust with exact trusted package matching.

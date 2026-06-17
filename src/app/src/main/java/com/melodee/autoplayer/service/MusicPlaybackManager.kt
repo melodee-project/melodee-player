@@ -10,7 +10,6 @@ import com.melodee.autoplayer.util.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import android.util.Log
 
 /**
  * Consolidated music playback manager that combines queue, playlist, and player management
@@ -59,7 +58,6 @@ class MusicPlaybackManager(private val context: Context) {
     val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
     
     private val _playHistory = MutableStateFlow<List<Song>>(emptyList())
-    val playHistory: StateFlow<List<Song>> = _playHistory.asStateFlow()
     
     private val _playbackContext = MutableStateFlow(PlaybackContext.SINGLE_SONG)
     val playbackContext: StateFlow<PlaybackContext> = _playbackContext.asStateFlow()
@@ -91,9 +89,7 @@ class MusicPlaybackManager(private val context: Context) {
         }
         return exoPlayer!!
     }
-    
-    fun getPlayer(): ExoPlayer? = exoPlayer
-    
+
     fun setQueue(songs: List<Song>, startIndex: Int = 0, context: PlaybackContext = PlaybackContext.PLAYLIST) {
         Logger.d("MusicPlaybackManager", "Setting queue with ${songs.size} songs, startIndex: $startIndex, context: $context")
         
@@ -146,26 +142,6 @@ class MusicPlaybackManager(private val context: Context) {
             true
         } else {
             Logger.w("MusicPlaybackManager", "Song not found in current queue: ${song.title}")
-            false
-        }
-    }
-    
-    fun playNext(): Boolean {
-        val nextSong = moveToNext()
-        return if (nextSong != null) {
-            playSong(nextSong)
-        } else {
-            Logger.d("MusicPlaybackManager", "No next song available")
-            false
-        }
-    }
-    
-    fun playPrevious(): Boolean {
-        val previousSong = moveToPrevious()
-        return if (previousSong != null) {
-            playSong(previousSong)
-        } else {
-            Logger.d("MusicPlaybackManager", "No previous song available")
             false
         }
     }
@@ -339,22 +315,14 @@ class MusicPlaybackManager(private val context: Context) {
     fun pause() {
         exoPlayer?.pause()
     }
-    
-    fun stop() {
-        exoPlayer?.stop()
-        _isPlaying.value = false
-        _currentPosition.value = 0L
-    }
-    
-    fun seekTo(position: Long) {
-        exoPlayer?.seekTo(position)
+
+    fun updateProgress(position: Long, duration: Long) {
         _currentPosition.value = position
+        if (duration > 0) {
+            _currentDuration.value = duration
+        }
     }
-    
-    fun getCurrentPosition(): Long = exoPlayer?.currentPosition ?: 0L
-    
-    fun getDuration(): Long = exoPlayer?.duration ?: 0L
-    
+
     fun clearQueue() {
         _originalQueue.value = emptyList()
         _currentQueue.value = emptyList()
