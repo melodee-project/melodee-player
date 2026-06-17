@@ -1,19 +1,20 @@
 package com.melodee.autoplayer.data
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsManagerTest {
-    private val context: Context = ApplicationProvider.getApplicationContext()
+    private lateinit var context: Context
 
     @Before
     fun setUp() {
+        context = RuntimeEnvironment.getApplication().applicationContext
         context.getSharedPreferences("MelodeePrefs", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("MelodeeSecurePrefs", Context.MODE_PRIVATE).edit().clear().commit()
     }
