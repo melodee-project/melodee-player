@@ -12,9 +12,9 @@ interface MusicApi {
     @GET("api/v1/system/info")
     suspend fun getSystemInfo(): ServerInfo
 
-    @POST("api/v1/auth/refresh")
+    @POST("api/v1/auth/refresh-token")
     suspend fun refresh(
-        @Body request: RefreshRequest,
+        @Body request: RefreshTokenRequest,
         @Header("X-Refresh-Request") skipAuthHeader: Boolean = true
     ): AuthenticationResponse
 
@@ -25,12 +25,12 @@ interface MusicApi {
     @GET("api/v1/user/playlists")
     suspend fun getPlaylists(
         @Query("page") page: Int,
-        @Query("pageSize") pageSize: Int = 50
+        @Query("limit") pageSize: Int = 50
     ): PlaylistPagedResponse
 
-    @GET("api/v1/playlists/{id}/songs")
+    @GET("api/v1/playlists/{apiKey}/songs")
     suspend fun getPlaylistSongs(
-        @Path("id") playlistId: String,
+        @Path("apiKey") playlistId: String,
         @Query("page") page: Int,
         @Query("pageSize") pageSize: Int = 50
     ): SongPagedResponse
@@ -68,14 +68,12 @@ interface MusicApi {
 
     @GET("api/v1/albums/{id}/songs")
     suspend fun getAlbumSongs(
-        @Path("id") albumId: String,
-        @Query("page") page: Int,
-        @Query("pageSize") pageSize: Int = 50
+        @Path("id") albumId: String
     ): SongPagedResponse
 
-    @POST("api/v1/songs/starred/{id}/{isStarred}")
+    @POST("api/v1/songs/starred/{apiKey}/{isStarred}")
     suspend fun favoriteSong(
-        @Path("id") songId: String,
+        @Path("apiKey") songId: String,
         @Path("isStarred") userStarred: Boolean
     ): retrofit2.Response<Unit>
 }

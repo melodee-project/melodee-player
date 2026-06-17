@@ -60,17 +60,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         _isLoading.value = false
                     }
                     ?.collect { response ->
-                        // Store user information in settings including avatar URLs
-                        settingsManager.userId = response.user.id.toString()
-                        settingsManager.userEmail = response.user.email
-                        settingsManager.username = response.user.username
-                        settingsManager.userThumbnailUrl = response.user.thumbnailUrl
-                        settingsManager.userImageUrl = response.user.imageUrl
-                        settingsManager.authToken = response.token
-                        settingsManager.refreshToken = response.refreshToken
-                        settingsManager.refreshTokenExpiresAt = response.refreshTokenExpiresAt
-                        
-                        // Inform global AuthenticationManager so app state reflects authenticated
                         try {
                             val app = getApplication<Application>() as com.melodee.autoplayer.MelodeeApplication
                             app.authenticationManager.saveAuthentication(
@@ -79,13 +68,24 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                                 userEmail = response.user.email,
                                 username = response.user.username,
                                 serverUrl = this@LoginViewModel.serverUrl,
-                                refreshToken = response.refreshToken,
-                                refreshTokenExpiresAt = response.refreshTokenExpiresAt,
+                                refreshToken = response.refreshToken.orEmpty(),
+                                refreshTokenExpiresAt = response.refreshTokenExpiresAt.orEmpty(),
                                 thumbnailUrl = response.user.thumbnailUrl,
                                 imageUrl = response.user.imageUrl
                             )
                         } catch (e: Exception) {
                             Log.w("LoginViewModel", "Failed to update AuthenticationManager on login", e)
+                            settingsManager.saveAuthenticationData(
+                                token = response.token,
+                                userId = response.user.id.toString(),
+                                userEmail = response.user.email,
+                                username = response.user.username,
+                                serverUrl = this@LoginViewModel.serverUrl,
+                                refreshToken = response.refreshToken.orEmpty(),
+                                refreshTokenExpiresAt = response.refreshTokenExpiresAt.orEmpty(),
+                                thumbnailUrl = response.user.thumbnailUrl,
+                                imageUrl = response.user.imageUrl
+                            )
                         }
 
                         // After successful authentication, stop any playing song and clear queue

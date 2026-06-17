@@ -144,6 +144,30 @@ class ModelSerializationTest {
     }
 
     @Test
+    fun artist_deserializes_nullable_genres_from_v1_api() {
+        val json = """
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "thumbnailUrl": "",
+              "imageUrl": "",
+              "name": "Artist",
+              "userStarred": false,
+              "userRating": 0,
+              "albumCount": 0,
+              "songCount": 0,
+              "createdAt": "",
+              "updatedAt": "",
+              "biography": null,
+              "genres": null
+            }
+        """.trimIndent()
+
+        val artist = gson.fromJson(json, Artist::class.java)
+
+        assertThat(artist.genres).isNull()
+    }
+
+    @Test
     fun paged_response_serializes_with_metadata() {
         val meta = PaginationMetadata(
             totalCount = 1,

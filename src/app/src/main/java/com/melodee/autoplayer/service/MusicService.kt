@@ -2456,40 +2456,18 @@ class MusicService : MediaBrowserServiceCompat() {
         Log.i("MusicService", "NetworkModule has token: $hasNetworkToken")
         Log.i("MusicService", "Current user: ${currentUser?.username ?: "null"}")
         
-        // If we have network token and user data but AuthenticationManager state is false,
-        // try to restore the authentication state
-        if (!isAuthenticatedState && hasNetworkToken && currentUser != null) {
-            Log.w("MusicService", "Authentication state mismatch detected - attempting to restore")
-            
-            // Force re-check authentication in AuthenticationManager
-            try {
-                // Re-initialize the AuthenticationManager state based on stored data
-                val settingsManager = SettingsManager(this)
-                if (settingsManager.isAuthenticated()) {
-                    Log.i("MusicService", "Stored authentication data is valid - restoring state")
-                    
-                    // Manually trigger authentication restoration
-                    NetworkModule.setBaseUrl(settingsManager.serverUrl)
-                    NetworkModule.setAuthToken(settingsManager.authToken)
-                    
-                    // Update AuthenticationManager state through saveAuthentication
-                    authenticationManager.saveAuthentication(
-                        settingsManager.authToken,
-                        settingsManager.userId,
-                        settingsManager.userEmail,
-                        settingsManager.username,
-                        settingsManager.serverUrl
-                    )
-                    
-                    Log.i("MusicService", "Authentication state restored successfully")
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.e("MusicService", "Failed to restore authentication state", e)
+        var isFullyAuthenticated = isAuthenticatedState && hasNetworkToken && currentUser != null
+        if (!isFullyAuthenticated && settingsManager.isAuthenticated()) {
+            Log.w("MusicService", "Authentication state incomplete; restoring stored credentials")
+            val restored = authenticationManager.restoreAuthenticationFromStorage()
+            isFullyAuthenticated = restored &&
+                NetworkModule.isAuthenticated() &&
+                authenticationManager.getCurrentUser() != null
+            if (isFullyAuthenticated && scrobbleManager == null) {
+                initializeScrobbleManager()
             }
         }
-        
-        val isFullyAuthenticated = isAuthenticatedState && hasNetworkToken && currentUser != null
+
         Log.i("MusicService", "Fully authenticated: $isFullyAuthenticated")
         
         return isFullyAuthenticated

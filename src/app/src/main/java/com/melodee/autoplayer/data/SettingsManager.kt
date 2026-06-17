@@ -12,6 +12,8 @@ class SettingsManager(context: Context) {
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val securePrefs: SharedPreferences = createSecurePreferences(appContext)
+    private val isUsingSecurePrefsFallback: Boolean
+        get() = securePrefs === prefs
 
     init {
         migrateSensitiveValuesToSecurePrefs()
@@ -50,21 +52,21 @@ class SettingsManager(context: Context) {
         set(value) {
             Log.d("SettingsManager", "Setting auth token: ${if (value.isNotEmpty()) "present" else "empty"}")
             securePrefs.edit().putString(KEY_AUTH_TOKEN, value).apply()
-            prefs.edit().remove(KEY_AUTH_TOKEN).apply()
+            removePlaintextTokenKey(KEY_AUTH_TOKEN)
         }
 
     var refreshToken: String
         get() = securePrefs.getString(KEY_REFRESH_TOKEN, "") ?: ""
         set(value) {
             securePrefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
-            prefs.edit().remove(KEY_REFRESH_TOKEN).apply()
+            removePlaintextTokenKey(KEY_REFRESH_TOKEN)
         }
 
     var refreshTokenExpiresAt: String
         get() = securePrefs.getString(KEY_REFRESH_TOKEN_EXPIRES_AT, "") ?: ""
         set(value) {
             securePrefs.edit().putString(KEY_REFRESH_TOKEN_EXPIRES_AT, value).apply()
-            prefs.edit().remove(KEY_REFRESH_TOKEN_EXPIRES_AT).apply()
+            removePlaintextTokenKey(KEY_REFRESH_TOKEN_EXPIRES_AT)
         }
 
     // Check if user is currently authenticated
@@ -103,23 +105,33 @@ class SettingsManager(context: Context) {
         Log.i("SettingsManager", "Image URL: $imageUrl")
         Log.i("SettingsManager", "Refresh token present: ${refreshToken.isNotEmpty()}")
         
+        val refreshTokenToStore = refreshToken.ifBlank { existingRefreshTokenFor(userId, serverUrl) }
+        val refreshTokenExpiresAtToStore = refreshTokenExpiresAt.ifBlank {
+            if (refreshTokenToStore.isNotBlank()) this.refreshTokenExpiresAt else ""
+        }
+
         val secureSuccess = securePrefs.edit()
             .putString(KEY_AUTH_TOKEN, token)
-            .putString(KEY_REFRESH_TOKEN, refreshToken)
-            .putString(KEY_REFRESH_TOKEN_EXPIRES_AT, refreshTokenExpiresAt)
+            .putString(KEY_REFRESH_TOKEN, refreshTokenToStore)
+            .putString(KEY_REFRESH_TOKEN_EXPIRES_AT, refreshTokenExpiresAtToStore)
             .commit()
 
-        val success = prefs.edit()
+        val regularEditor = prefs.edit()
             .putString(KEY_USER_ID, userId)
             .putString(KEY_USER_EMAIL, userEmail)
             .putString(KEY_USER_NAME, username)
             .putString(KEY_SERVER_URL, serverUrl)
             .putString(KEY_USER_THUMBNAIL_URL, thumbnailUrl)
             .putString(KEY_USER_IMAGE_URL, imageUrl)
-            .remove(KEY_AUTH_TOKEN)
-            .remove(KEY_REFRESH_TOKEN)
-            .remove(KEY_REFRESH_TOKEN_EXPIRES_AT)
-            .commit() // Use commit() instead of apply() for synchronous save
+
+        if (!isUsingSecurePrefsFallback) {
+            regularEditor
+                .remove(KEY_AUTH_TOKEN)
+                .remove(KEY_REFRESH_TOKEN)
+                .remove(KEY_REFRESH_TOKEN_EXPIRES_AT)
+        }
+
+        val success = regularEditor.commit() // Use commit() instead of apply() for synchronous save
         
         Log.i("SettingsManager", "Authentication data saved successfully: secure=$secureSuccess, regular=$success")
         
@@ -189,6 +201,17 @@ class SettingsManager(context: Context) {
                 .apply()
         }
         Log.i("SettingsManager", "Migrated authentication tokens to secure preferences")
+    }
+
+    private fun removePlaintextTokenKey(key: String) {
+        if (!isUsingSecurePrefsFallback) {
+            prefs.edit().remove(key).apply()
+        }
+    }
+
+    private fun existingRefreshTokenFor(userId: String, serverUrl: String): String {
+        val sameUser = this.userId == userId && this.serverUrl == serverUrl
+        return if (sameUser) refreshToken else ""
     }
 
     companion object {

@@ -58,6 +58,95 @@ class RetrofitPathTest {
     }
 
     @Test
+    fun `refresh token endpoint uses v1 body endpoint`() = runBlocking {
+        mockWebServer.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "token": "access",
+                  "serverVersion": "1.2.0",
+                  "expiresAt": "2024-01-01T00:00:00Z",
+                  "refreshToken": "refresh",
+                  "refreshTokenExpiresAt": "2024-02-01T00:00:00Z",
+                  "user": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "thumbnailUrl": "",
+                    "imageUrl": "",
+                    "username": "tester",
+                    "email": "tester@example.com",
+                    "isAdmin": false,
+                    "isEditor": false,
+                    "roles": [],
+                    "songsPlayed": 0,
+                    "artistsLiked": 0,
+                    "artistsDisliked": 0,
+                    "albumsLiked": 0,
+                    "albumsDisliked": 0,
+                    "songsLiked": 0,
+                    "songsDisliked": 0,
+                    "createdAt": "",
+                    "updatedAt": ""
+                  }
+                }
+                """.trimIndent()
+            )
+        )
+
+        try {
+            api.refresh(com.melodee.autoplayer.domain.model.RefreshTokenRequest("refresh-token"))
+        } catch (_: Exception) {
+        }
+
+        val request = mockWebServer.takeRequest()
+
+        assertThat(request.path).isEqualTo("/api/v1/auth/refresh-token")
+        assertThat(request.body.readUtf8()).contains("\"refreshToken\":\"refresh-token\"")
+    }
+
+    @Test
+    fun `user playlists endpoint uses limit query parameter`() = runBlocking {
+        mockWebServer.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {"meta": {"totalCount": 0, "pageSize": 25, "currentPage": 1, "totalPages": 0, "hasPrevious": false, "hasNext": false}, "data": []}
+                """.trimIndent()
+            )
+        )
+
+        try {
+            api.getPlaylists(1, 25)
+        } catch (_: Exception) {
+        }
+
+        val request = mockWebServer.takeRequest()
+
+        assertThat(request.path).contains("/api/v1/user/playlists?page=1&limit=25")
+        assertThat(request.path).doesNotContain("pageSize")
+    }
+
+    @Test
+    fun `album songs endpoint does not send unsupported pagination query`() = runBlocking {
+        val albumId = "album-uuid-789"
+
+        mockWebServer.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {"meta": {"totalCount": 0, "pageSize": 50, "currentPage": 1, "totalPages": 0, "hasPrevious": false, "hasNext": false}, "data": []}
+                """.trimIndent()
+            )
+        )
+
+        try {
+            api.getAlbumSongs(albumId)
+        } catch (_: Exception) {
+        }
+
+        val request = mockWebServer.takeRequest()
+
+        assertThat(request.path).isEqualTo("/api/v1/albums/$albumId/songs")
+    }
+
+    @Test
     fun `favorite song endpoint uses correct path parameters`() = runBlocking {
         val songId = "song-uuid-123"
         val isStarred = true

@@ -30,7 +30,9 @@ class AuthenticationManager(private val context: Context) {
         NetworkModule.setTokenUpdateCallback { token, refresh, refreshExpiresAt ->
             settingsManager.authToken = token
             settingsManager.refreshToken = refresh
-            settingsManager.refreshTokenExpiresAt = refreshExpiresAt
+            if (refreshExpiresAt.isNotBlank()) {
+                settingsManager.refreshTokenExpiresAt = refreshExpiresAt
+            }
         }
     }
     
@@ -118,7 +120,7 @@ class AuthenticationManager(private val context: Context) {
         
         // Update NetworkModule
         NetworkModule.setBaseUrl(serverUrl)
-        NetworkModule.setTokens(token, refreshToken)
+        NetworkModule.setTokens(token, settingsManager.refreshToken)
         
         // Update state
         _isAuthenticated.value = true

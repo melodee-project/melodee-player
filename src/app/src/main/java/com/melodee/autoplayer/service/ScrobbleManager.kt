@@ -109,7 +109,6 @@ class ScrobbleManager(
         }
     }
     
-    @Suppress("DEPRECATION")
     private suspend fun scrobbleNowPlaying(tracker: ScrobbleTracker) {
         if (tracker.nowPlayingScrobbled) return
         
@@ -141,8 +140,8 @@ class ScrobbleManager(
                 }
                 is ScrobbleResult.Error -> {
                     Log.e(TAG, "Failed to scrobble 'nowPlaying' for song: ${tracker.song.title}. " +
-                            "Status: ${result.httpStatus}, Title: ${result.errorResponse.title}, " +
-                            "Type: ${result.errorResponse.type}, TraceId: ${result.errorResponse.traceId}")
+                            "Status: ${result.httpStatus}, Code: ${result.errorResponse.code}, " +
+                            "Message: ${result.errorResponse.message}, CorrelationId: ${result.errorResponse.correlationId}")
                 }
                 is ScrobbleResult.NetworkError -> {
                     Log.e(TAG, "Network error scrobbling 'nowPlaying' for song: ${tracker.song.title}", result.exception)
@@ -154,7 +153,6 @@ class ScrobbleManager(
         }
     }
     
-    @Suppress("DEPRECATION")
     private suspend fun scrobblePlayed(tracker: ScrobbleTracker, duration: Long) {
         if (tracker.playedScrobbled) return
         
@@ -188,8 +186,8 @@ class ScrobbleManager(
                 }
                 is ScrobbleResult.Error -> {
                     Log.e(TAG, "Failed to scrobble 'played' for song: ${tracker.song.title}. " +
-                            "Status: ${result.httpStatus}, Title: ${result.errorResponse.title}, " +
-                            "Type: ${result.errorResponse.type}, TraceId: ${result.errorResponse.traceId}")
+                            "Status: ${result.httpStatus}, Code: ${result.errorResponse.code}, " +
+                            "Message: ${result.errorResponse.message}, CorrelationId: ${result.errorResponse.correlationId}")
                 }
                 is ScrobbleResult.NetworkError -> {
                     Log.e(TAG, "Network error scrobbling 'played' for song: ${tracker.song.title}", result.exception)

@@ -7,7 +7,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.melodee.autoplayer.util.Logger
-import com.melodee.autoplayer.domain.model.RefreshRequest
+import com.melodee.autoplayer.domain.model.RefreshTokenRequest
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
 import okhttp3.OkHttpClient
@@ -271,14 +271,14 @@ object NetworkModule {
             if (currentRefreshToken.isEmpty() || api == null) return TokenRefreshResult.INVALID_CREDENTIALS
             return try {
                 val refreshResponse = runBlocking {
-                    api.refresh(RefreshRequest(currentRefreshToken), skipAuthHeader = true)
+                    api.refresh(RefreshTokenRequest(currentRefreshToken), skipAuthHeader = true)
                 }
-                val newRefreshToken = refreshResponse.refreshToken.ifBlank { currentRefreshToken }
+                val newRefreshToken = refreshResponse.refreshToken.orEmpty().ifBlank { currentRefreshToken }
                 setTokens(refreshResponse.token, newRefreshToken)
                 onTokenUpdated?.invoke(
                     refreshResponse.token,
                     newRefreshToken,
-                    refreshResponse.refreshTokenExpiresAt
+                    refreshResponse.refreshTokenExpiresAt.orEmpty()
                 )
                 TokenRefreshResult.SUCCESS
             } catch (e: HttpException) {
