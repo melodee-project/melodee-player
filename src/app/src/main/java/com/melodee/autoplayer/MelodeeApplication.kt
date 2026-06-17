@@ -35,10 +35,10 @@ class MelodeeApplication : Application(), ImageLoaderFactory {
         Log.i("MelodeeApplication", "=== APPLICATION STARTUP COMPLETE ===")
     }
     override fun newImageLoader(): ImageLoader {
+        val isDebuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         val loggingInterceptor = HttpLoggingInterceptor { message ->
             Log.d("OkHttp", message)
         }.apply {
-            val isDebuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
             level = if (isDebuggable) {
                 HttpLoggingInterceptor.Level.BASIC
             } else {
@@ -56,7 +56,9 @@ class MelodeeApplication : Application(), ImageLoaderFactory {
                     .addInterceptor { chain ->
                         val request = chain.request()
                         val response = chain.proceed(request)
-                        Log.d("OkHttp", "Response headers for ${request.url}: ${response.headers}")
+                        if (isDebuggable) {
+                            Log.d("OkHttp", "Response headers for ${request.url}: ${response.headers}")
+                        }
                         response
                     }
                     .addInterceptor(loggingInterceptor)

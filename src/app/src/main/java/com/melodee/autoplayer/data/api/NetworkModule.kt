@@ -88,8 +88,10 @@ object NetworkModule {
             authToken = token
             refreshToken = refresh
             handlingAuthFailure.set(false)
-            Logger.d("NetworkModule", "Recreating Retrofit instance with updated tokens")
-            createRetrofitInstance()
+            if (retrofit == null && baseUrl.isNotEmpty()) {
+                Logger.d("NetworkModule", "Creating Retrofit instance after token update")
+                createRetrofitInstance()
+            }
             Logger.logAuth("NetworkModule", "Tokens configured")
         }
     }
