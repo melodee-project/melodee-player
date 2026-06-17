@@ -1041,8 +1041,6 @@ class MusicService : MediaBrowserServiceCompat() {
         playbackManager.release()
         player = null
         
-        // Clear on-disk media cache on service shutdown
-        MediaCache.clearCache(applicationContext)
         super.onDestroy()
     }
 
