@@ -34,6 +34,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
       - name: Grant execute permission for gradlew
         working-directory: src
         run: chmod +x gradlew
@@ -44,12 +47,12 @@ jobs:
 
       - name: Run Unit Tests
         working-directory: src
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Run Instrumented Tests (emulator)
         if: false # enable when emulator is set up
         working-directory: src
-        run: ./gradlew connectedDebugAndroidTest --stacktrace
+        run: ./gradlew :app:connectedDebugAndroidTest --stacktrace
 
       - name: Benchmark (connected)
         if: false # enable when device/emulator available
@@ -58,4 +61,4 @@ jobs:
 
       - name: Coverage Report
         working-directory: src
-        run: ./gradlew jacocoTestReport --stacktrace
+        run: ./gradlew :app:jacocoTestReport --stacktrace

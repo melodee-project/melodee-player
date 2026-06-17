@@ -154,7 +154,7 @@ If the Android SDK is not discovered automatically, set `ANDROID_HOME` before ru
 ANDROID_HOME=/path/to/Android/Sdk ./gradlew testDebugUnitTest
 ```
 
-GitHub Actions currently runs `./gradlew build --stacktrace`, `./gradlew testDebugUnitTest --stacktrace`, and `./gradlew jacocoTestReport --stacktrace`. Connected tests and benchmarks are present in the workflow but disabled until CI has an emulator or device runner.
+GitHub Actions installs Android SDK 36 and currently runs `./gradlew build --stacktrace`, `./gradlew :app:testDebugUnitTest --stacktrace`, and `./gradlew :app:jacocoTestReport --stacktrace`. Connected tests and benchmarks are present in the workflow but disabled until CI has an emulator or device runner.
 
 ## Documentation
 

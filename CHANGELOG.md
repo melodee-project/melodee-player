@@ -79,6 +79,8 @@ This file records notable project changes. It follows the
   home, service, and model serialization code by removing dead helpers,
   simplifying redundant conditions, and keeping only intentional Android
   lifecycle suppressions.
+- Updated Android CI to explicitly install Android SDK 36 and run app-qualified
+  unit-test and JaCoCo tasks from the nested Gradle project.
 
 ### Fixed
 
@@ -96,6 +98,9 @@ This file records notable project changes. It follows the
   synchronized.
 - Fixed nullable refresh-token response handling so login and token refresh
   persistence tolerate v1 responses that omit rotated refresh-token values.
+- Fixed the JaCoCo report task so CI coverage uses debug unit-test execution
+  data and non-instrumented app classes instead of requiring connected Android
+  coverage.
 
 ### Security
 
