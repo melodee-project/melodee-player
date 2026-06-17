@@ -27,9 +27,12 @@ class AuthenticationManager(private val context: Context) {
         }
 
         // Persist refreshed tokens when NetworkModule updates them
-        NetworkModule.setTokenUpdateCallback { token, refresh ->
+        NetworkModule.setTokenUpdateCallback { token, refresh, refreshExpiresAt ->
             settingsManager.authToken = token
             settingsManager.refreshToken = refresh
+            if (refreshExpiresAt.isNotBlank()) {
+                settingsManager.refreshTokenExpiresAt = refreshExpiresAt
+            }
         }
     }
     
@@ -48,9 +51,7 @@ class AuthenticationManager(private val context: Context) {
         Log.i("AuthenticationManager", "Username present: $hasUsername")
         Log.i("AuthenticationManager", "User email present: $hasUserEmail")
         
-        if (hasAuthToken) {
-            Log.i("AuthenticationManager", "Auth token: ${settingsManager.authToken.take(20)}...")
-        }
+        Log.i("AuthenticationManager", "Auth token present: $hasAuthToken")
         if (hasServerUrl) {
             Log.i("AuthenticationManager", "Server URL: ${settingsManager.serverUrl}")
         }
@@ -119,7 +120,7 @@ class AuthenticationManager(private val context: Context) {
         
         // Update NetworkModule
         NetworkModule.setBaseUrl(serverUrl)
-        NetworkModule.setTokens(token, refreshToken)
+        NetworkModule.setTokens(token, settingsManager.refreshToken)
         
         // Update state
         _isAuthenticated.value = true
@@ -146,25 +147,12 @@ class AuthenticationManager(private val context: Context) {
     
     private fun handleAuthenticationFailure() {
         Log.w("AuthenticationManager", "Authentication failed - token expired or invalid")
-        
-        // Before clearing everything, check if we actually have stored credentials
-        val hasStoredAuth = settingsManager.isAuthenticated()
-        
-        if (hasStoredAuth) {
-            Log.i("AuthenticationManager", "Still have stored credentials - may be temporary network issue")
-            // Don't clear stored authentication for temporary issues
-            // Just update the state to show we need to re-authenticate
-            _isAuthenticated.value = false
-            _authenticationError.value = "Authentication failed. Please try again or re-login if the problem persists."
-        } else {
-            Log.i("AuthenticationManager", "No stored credentials - clearing authentication")
-            // Clear stored authentication
-            settingsManager.logout()
-            
-            // Update state
-            _isAuthenticated.value = false
-            _authenticationError.value = "Your session has expired. Please login again."
-        }
+
+        // NetworkModule only invokes this callback for non-recoverable auth failures.
+        // Transient refresh/network failures keep stored credentials so Android Auto can retry.
+        settingsManager.logout()
+        _isAuthenticated.value = false
+        _authenticationError.value = "Your session has expired. Please login again."
         
         Log.d("AuthenticationManager", "Authentication failure handled - user needs to re-authenticate")
     }

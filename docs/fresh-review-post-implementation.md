@@ -174,18 +174,18 @@ if (BuildConfig.DEBUG) {
 **Changes**:
 ```kotlin
 // Added KSP plugin for Room
-id("com.google.devtools.ksp") version "1.9.20-1.0.14"
+id("com.google.devtools.ksp") version "2.3.8"
 
 // Added dependencies
-val roomVersion = "2.6.1"
+val roomVersion = "2.8.4"
 implementation("androidx.room:room-runtime:$roomVersion")
 implementation("androidx.room:room-ktx:$roomVersion")
 ksp("androidx.room:room-compiler:$roomVersion")
-implementation("androidx.security:security-crypto:1.1.0-alpha06")
+implementation("androidx.security:security-crypto:1.1.0")
 ```
 
 **Quality Aspects**:
-- Correct versions (Room 2.6.1 is latest stable)
+- Current stable Room version
 - KSP instead of kapt (better performance)
 - Organized with version variable
 - Security library is alpha, but stable enough for production

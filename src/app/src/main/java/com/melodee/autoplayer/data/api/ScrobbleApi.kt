@@ -13,18 +13,17 @@ import retrofit2.http.POST
 data class ScrobbleRequest(
     val songId: String,
     val playerName: String = "MelodeePlayer",
-    @Deprecated("Use scrobbleTypeValue")
-    val scrobbleType: String? = null,
+    val scrobbleTypeValue: ScrobbleRequestType,
+    val scrobbleType: String = scrobbleTypeValue.apiName,
     val timestamp: Double,
-    val playedDuration: Double,
-    val scrobbleTypeValue: ScrobbleRequestType
+    val playedDuration: Double
 )
 
 @JsonAdapter(ScrobbleRequestTypeAdapter::class)
-enum class ScrobbleRequestType(val value: Int) {
-    UNKNOWN(0),
-    NOW_PLAYING(1),
-    PLAYED(2)
+enum class ScrobbleRequestType(val value: Int, val apiName: String) {
+    UNKNOWN(0, "unknown"),
+    NOW_PLAYING(1, "nowPlaying"),
+    PLAYED(2, "played")
 }
 
 class ScrobbleRequestTypeAdapter : TypeAdapter<ScrobbleRequestType>() {
@@ -43,10 +42,9 @@ data class ScrobbleResponse(
 )
 
 data class ScrobbleErrorResponse(
-    val type: String,
-    val title: String,
-    val status: Int,
-    val traceId: String
+    val code: String = "unknown",
+    val message: String = "",
+    val correlationId: String? = null
 )
 
 // Sealed class to represent either success or error response
@@ -77,20 +75,18 @@ fun Response<Void>.toScrobbleResult(): ScrobbleResult {
                 } catch (e: JsonSyntaxException) {
                     // If we can't parse the error response, create a generic one
                     val genericError = ScrobbleErrorResponse(
-                        type = "unknown",
-                        title = "HTTP Error ${code()}",
-                        status = code(),
-                        traceId = "unknown"
+                        code = "http_${code()}",
+                        message = "HTTP Error ${code()}",
+                        correlationId = null
                     )
                     ScrobbleResult.Error(genericError, code())
                 }
             } else {
                 // No error body, create a generic error
                 val genericError = ScrobbleErrorResponse(
-                    type = "unknown",
-                    title = "HTTP Error ${code()}",
-                    status = code(),
-                    traceId = "unknown"
+                    code = "http_${code()}",
+                    message = "HTTP Error ${code()}",
+                    correlationId = null
                 )
                 ScrobbleResult.Error(genericError, code())
             }

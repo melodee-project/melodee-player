@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.melodee.autoplayer.data
 
 import android.content.Context

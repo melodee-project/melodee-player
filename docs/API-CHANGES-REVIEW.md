@@ -1276,7 +1276,7 @@ class RetrofitPathTest {
 **Dependencies Required:**
 Add to `src/app/build.gradle.kts`:
 ```kotlin
-testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+testImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
 ```
 
 ---

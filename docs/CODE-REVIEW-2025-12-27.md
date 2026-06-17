@@ -286,14 +286,14 @@ sealed class AppError {
 ## Dependencies Review
 
 ### Core Dependencies ✅
-- **Compose**: Up to date (BOM 2024.12.01)
-- **Media3**: Using 1.2.0 (current stable is 1.4.1 - consider upgrading)
-- **Kotlin**: 1.9.20 (current stable is 1.9.22 - minor update available)
-- **Retrofit**: 2.11.0 ✅
-- **Coroutines**: 1.9.0 ✅
+- **Compose**: Up to date (BOM 2026.05.01)
+- **Media3**: 1.10.1 ✅
+- **Kotlin**: 2.3.21 with AGP built-in Kotlin ✅
+- **Retrofit**: 3.0.0 ✅
+- **Coroutines**: 1.11.0 ✅
 
 ### Security Dependencies ✅
-- **EncryptedSharedPreferences**: 1.1.0-alpha06 (appropriate for production)
+- **EncryptedSharedPreferences**: 1.1.0
 
 ### Removed Dependencies ✅
 - ~~Room database~~ (no longer needed)

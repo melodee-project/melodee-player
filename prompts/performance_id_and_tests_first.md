@@ -13,7 +13,7 @@ Users report poor performance on **spotty cellular** and **slow Wi-Fi**. Your jo
 - Images: Coil
 - Concurrency: Kotlin Coroutines/Flows
 - Tests available/expected: JUnit, AndroidX Test, Espresso, Compose UI testing
-- Toolchain: Kotlin 1.9.20, Gradle 8.12, AGP 8.10.0; minSdk 21, targetSdk 35
+- Toolchain: Kotlin 2.3.21 with AGP built-in Kotlin, Gradle 9.5.1, AGP 9.2.1; minSdk 23, targetSdk 36
 - Build/run: `cd src && ./gradlew build` / `./gradlew installDebug`
 
 ## Ground Rules
@@ -101,4 +101,3 @@ Provide a table:
 - Clear, maintainable assertions; minimal mocking; no dead code in tests.
 
 > Output everything as described and stop before making production code changes. Recommend changes; don’t apply them.
-

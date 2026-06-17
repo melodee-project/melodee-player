@@ -173,7 +173,7 @@ data class Artist(
     val createdAt: String = "",
     val updatedAt: String = "",
     val biography: String? = null,
-    val genres: List<String> = emptyList()
+    val genres: List<String>? = emptyList()
 ) : Parcelable {
     constructor(parcel: Parcel) : this(
         id = parcel.readUuidString(),
@@ -202,7 +202,7 @@ data class Artist(
         parcel.writeString(createdAt)
         parcel.writeString(updatedAt)
         parcel.writeString(biography)
-        parcel.writeStringList(genres)
+        parcel.writeStringList(genres.orEmpty())
     }
 
     override fun describeContents(): Int = 0
@@ -279,8 +279,8 @@ data class AuthenticationResponse(
     var serverVersion: String,
     val user: User,
     val expiresAt: String = "",
-    val refreshToken: String = "",
-    val refreshTokenExpiresAt: String = ""
+    val refreshToken: String? = null,
+    val refreshTokenExpiresAt: String? = null
 )
 
 typealias AuthResponse = AuthenticationResponse
@@ -291,9 +291,12 @@ data class LoginModel(
     val password: String
 )
 
-data class RefreshRequest(
-    val refreshToken: String
+data class RefreshTokenRequest(
+    val refreshToken: String,
+    val deviceId: String? = null
 )
+
+typealias RefreshRequest = RefreshTokenRequest
 
 data class ServerInfo(
     val name: String? = null,

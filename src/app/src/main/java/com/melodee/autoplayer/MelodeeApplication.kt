@@ -28,21 +28,22 @@ class MelodeeApplication : Application(), ImageLoaderFactory {
         Log.i("MelodeeApplication", "Initializing AuthenticationManager...")
         authenticationManager = AuthenticationManager(this)
 
-        // Initialize NetworkModule to enable HTTP cache and auth failure handling
+        // Initialize NetworkModule to enable HTTP cache. AuthenticationManager owns auth failure handling.
         NetworkModule.init(this)
-        NetworkModule.setAuthenticationFailureCallback {
-            Log.w("MelodeeApplication", "Authentication failure detected by NetworkModule")
-            // Potential hook: route to login screen via a global event bus
-        }
         
         Log.i("MelodeeApplication", "Authentication manager initialized")
         Log.i("MelodeeApplication", "=== APPLICATION STARTUP COMPLETE ===")
     }
     override fun newImageLoader(): ImageLoader {
+        val isDebuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         val loggingInterceptor = HttpLoggingInterceptor { message ->
             Log.d("OkHttp", message)
         }.apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (isDebuggable) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
 
         return ImageLoader.Builder(this)
@@ -55,7 +56,9 @@ class MelodeeApplication : Application(), ImageLoaderFactory {
                     .addInterceptor { chain ->
                         val request = chain.request()
                         val response = chain.proceed(request)
-                        Log.d("OkHttp", "Response headers for ${request.url}: ${response.headers}")
+                        if (isDebuggable) {
+                            Log.d("OkHttp", "Response headers for ${request.url}: ${response.headers}")
+                        }
                         response
                     }
                     .addInterceptor(loggingInterceptor)

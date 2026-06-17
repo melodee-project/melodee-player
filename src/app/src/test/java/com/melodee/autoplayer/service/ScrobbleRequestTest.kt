@@ -30,6 +30,7 @@ class ScrobbleRequestTest {
 
         assertThat(jsonObject.get("timestamp").asDouble).isEqualTo(expectedSeconds)
         assertThat(jsonObject.get("timestamp").asDouble).isLessThan(2000000000.0)
+        assertThat(jsonObject.get("scrobbleType").asString).isEqualTo("nowPlaying")
     }
 
     @Test
@@ -51,6 +52,7 @@ class ScrobbleRequestTest {
         val jsonObject = JsonParser.parseString(json).asJsonObject
 
         assertThat(jsonObject.get("playedDuration").asDouble).isEqualTo(expectedSeconds)
+        assertThat(jsonObject.get("scrobbleType").asString).isEqualTo("played")
     }
 
     @Test

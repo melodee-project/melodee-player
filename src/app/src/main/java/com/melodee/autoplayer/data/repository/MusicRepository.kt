@@ -62,7 +62,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
                 LoginModel(userName = emailOrUsername, password = password)
             }
             val response = api.login(loginModel)
-            NetworkModule.setTokens(response.token, response.refreshToken)
+            NetworkModule.setTokens(response.token, response.refreshToken.orEmpty())
             response
         }
         emit(response)
@@ -132,7 +132,7 @@ class MusicRepository(private val baseUrl: String, private val context: Context)
 
     fun getAlbumSongs(albumId: String, page: Int = 1): Flow<PaginatedResponse<Song>> = flow {
         val response = ErrorHandler.handleOperation(context, "getAlbumSongs", "MusicRepository") {
-            api.getAlbumSongs(albumId, page)
+            api.getAlbumSongs(albumId)
         }
         emit(PaginatedResponse(meta = response.meta, data = response.data))
     }

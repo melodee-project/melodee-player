@@ -2,110 +2,177 @@
   <img src="graphics/logo.png" alt="Melodee logo" height="120" />
 
   # Melodee Android Auto Player
-  Native Android + Android Auto client for the Melodee self-hosted music server, built with Jetpack Compose and Media3.
+  Native Android and Android Auto client for the Melodee self-hosted music server, built with Kotlin, Jetpack Compose, and Media3.
 
   [![Android CI](https://github.com/melodee-project/melodee-player/actions/workflows/android.yml/badge.svg)](https://github.com/melodee-project/melodee-player/actions/workflows/android.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-  ![minSdk](https://img.shields.io/badge/minSdk-21-blue)
-  ![targetSdk](https://img.shields.io/badge/targetSdk-35-blue)
+  ![minSdk](https://img.shields.io/badge/minSdk-23-blue)
+  ![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)
 
-  Features | Quick Start | Android Auto | Architecture | Testing | Documentation | Contributing
+  [Features](#features) | [Quick Start](#quick-start) | [Configuration](#configuration) | [Android Auto](#android-auto) | [Architecture](#architecture--stack) | [Testing](#testing)
 </div>
 
 ## Overview
 
-Melodee Player is a Kotlin/Compose app (version 1.7.1, minSdk 21 / targetSdk 35) that streams music from a Melodee server to phones and Android Auto. It ships with a background MediaBrowserService for car interfaces, a Compose UI for handheld use, and a Media3-based playback stack with caching and scrobbling.
+Melodee Player is a Kotlin/Compose Android app for browsing, searching, and streaming music from a Melodee API v1 server. Version 1.8.0 targets Android SDK 36, supports Android 6.0+ devices (minSdk 23), and includes a `MediaBrowserServiceCompat`/`MediaSessionCompat` playback service for Android Auto.
+
+The Gradle project is intentionally nested under `src/`. Open `src/` in Android Studio or run Gradle from that directory.
 
 ## Features
 
-- Android Auto ready: MediaBrowserServiceCompat + MediaSession with browse/search, metadata, steering wheel controls, and voice-triggered playback.
-- Rich browse/search: playlists, songs, artists, and albums with pagination, infinite scroll, artist/album drill-ins, and server-side favorites.
-- Playback service: Media3/ExoPlayer with queue control, shuffle/repeat, prefetching, notification controls, and streaming cache.
-- Resilient networking: login and token refresh against a Melodee API, request deduplication, retry/backoff, normalized server URLs, and scrobble reporting.
-- Compose UI: Material 3 theming (light/dark/dynamic), now playing screen + mini player, playlist view, and artist/album galleries with Coil-powered artwork.
-- Performance and diagnostics: macrobenchmarks, unit/UI tests, optional performance monitor hooks, and detailed logging for Android Auto interactions.
+- Android Auto browsing, search, voice-triggered playback, media buttons, metadata, and notification controls.
+- Compose handheld UI with login, home/search, playlist, now-playing, settings, theme, artist, and album views.
+- Media3/ExoPlayer playback with queue control, shuffle/repeat, seeking, foreground playback notification, audio focus handling, prefetching, and on-disk media caching.
+- Melodee API v1 integration for authentication, refresh-token renewal, current user profile, user playlists, playlist songs, search, artist browsing, album songs, favorites, and scrobbling.
+- Authentication persistence with encrypted SharedPreferences when available, migration from previous plaintext token keys, refresh-token retention, and Android Auto service-side restoration.
+- OkHttp/Retrofit networking with bearer-token injection, automatic 401 refresh, retry/backoff for recoverable failures, HTTP caching, authorization-header redaction, and request deduplication.
+- Local unit and Robolectric tests, a macrobenchmark module, JaCoCo coverage wiring, and GitHub Actions CI for build/test/coverage.
+
+## Requirements
+
+- Android Studio that supports Android Gradle Plugin 9.2.1.
+- JDK 21. The Gradle daemon toolchain is configured for Java 21.
+- Android SDK Platform 36 and Build Tools installed through Android Studio.
+- A device or emulator running API 23 or newer.
+- A running Melodee API v1 server. This repository does not include the server source.
 
 ## Quick Start
 
-1. **Requirements**
-   - Android Studio Hedgehog (2023.1.1)+, JDK 17, Android SDK Platform 35
-   - Device or emulator on API 21+ (Android Auto features require a device or emulator with Android Auto)
-   - A running Melodee API server (use your deployment or the bundled `api-server/`—see its README for setup)
-2. **Clone and open**
+1. Clone the repository.
+
    ```bash
    git clone https://github.com/melodee-project/melodee-player.git
    cd melodee-player/src
    ```
-   Open the `src` directory in Android Studio or keep using the CLI.
-3. **Build and run**
+
+2. Open the project in Android Studio.
+
+   Use **File > Open** and select `melodee-player/src`, not the repository root.
+
+3. Create or select an Android run configuration.
+
+   Use an **Android App** configuration with module `app`, deploy target set to your emulator or connected device, and launch activity set to the default launcher activity.
+
+4. Build from the command line when needed.
+
    ```bash
-   ./gradlew build          # compile and run unit tests
-   ./gradlew installDebug   # deploy to a connected device/emulator
+   ./gradlew build
+   ./gradlew installDebug
    ```
-4. **Configure the backend**
-   - Launch the app, enter your Melodee server base URL (e.g., `https://your-host/`), and sign in with your account.
-   - The app stores auth tokens locally and will refresh them automatically during playback or search.
-5. **Use it**
-   - Browse playlists/artists/albums, search, start playback, and manage the queue (shuffle/repeat, add/remove, skip/seek).
-   - Connect to Android Auto to browse, search, and control playback hands-free.
+
+5. Launch Melodee and sign in with your server URL, email or username, and password.
+
+## Configuration
+
+### Server URL
+
+Enter the base URL for your Melodee server in the login screen, for example:
+
+```text
+https://music.example.com/
+```
+
+The app normalizes the base URL and then calls versioned API routes such as `/api/v1/auth/authenticate` and `/api/v1/auth/refresh-token`.
+
+Remote cleartext HTTP is disabled. For local development, cleartext traffic is allowed only for `localhost`, `127.0.0.1`, `10.0.2.2`, and `10.0.3.2`.
+
+When testing from the standard Android emulator against a server running on this computer, use:
+
+```text
+http://10.0.2.2:<port>/
+```
+
+### Authentication
+
+Access and refresh tokens are stored locally. On devices where AndroidX Security encrypted preferences are available, token values are stored in encrypted SharedPreferences. If encrypted preferences cannot be created, the app falls back to regular app-private SharedPreferences.
+
+The refresh token is preserved when the server returns a new access token without rotating the refresh token. Android Auto uses the same stored authentication state as the handheld app, so plugging into a car should not require another login unless the server rejects or expires the refresh token.
+
+### Firebase
+
+The app module includes Firebase Crashlytics and Analytics dependencies and a checked-in `google-services.json`. Replace that file if you build under a different Firebase project.
 
 ## Android Auto
 
-- Browse playlists and the current queue from Android Auto using the MediaBrowser tree.
-- Voice search and playback via Google Assistant; results are cached for quick follow-up commands.
-- Full metadata (art, artist, album) and notification controls; steering wheel buttons map to previous/next/play-pause.
-- Queue mutations (add/clear) stay in sync with the handheld UI.
+The app declares an exported media browser service for Android Auto discovery. `MusicService.onGetRoot()` validates the caller before returning browse content.
+
+Current Android Auto capabilities include:
+
+- Playlist and current-queue browsing through the media browser tree.
+- Search and voice-triggered playback through media search intents.
+- Play, pause, previous, next, seek, shuffle, repeat, and favorite actions where supported by the active media surface.
+- Playback metadata, artwork, media buttons, and foreground notification controls.
+- Authentication restoration from local storage when Android Auto starts the service before the handheld UI is opened.
+
+For desktop testing, run the app on an emulator or connected device from Android Studio, sign in once through the handheld UI, then use Android Auto Desktop Head Unit or an Android Auto-capable test environment to connect to the same installed app.
 
 ## Architecture & Stack
 
-### Project layout
-- `src/app` — Compose Android app (app module)
-- `src/benchmark` — Macrobenchmark suite for startup/navigation/scroll performance
-- `docs/` — Architecture, reviews, Android Auto specs, performance notes
-- `api-server/` — Melodee backend source for local testing (see `api-server/README.md`)
-- `graphics/` — Branding assets for docs/UI
-- `prompts/` — Prompt artifacts used during development
+### Project Layout
 
-### Tech stack
-- UI: Jetpack Compose, Material 3, Navigation Compose
-- Playback: Media3/ExoPlayer, MediaBrowserServiceCompat, MediaSessionCompat, Media cache/prefetch
-- Networking: Retrofit + OkHttp (logging, retry/backoff, caching), Gson, request deduplication, token refresh handling
-- Data/auth: SharedPreferences-based SettingsManager (encrypted SecureSettingsManager available for migration), URL normalization, scrobble API integration
-- Concurrency: Kotlin Coroutines + Flow
-- Images: Coil (+ GIF support)
-- Testing: JUnit, MockK, Truth, Robolectric, Compose UI tests, AndroidX Test, Macrobenchmark, JaCoCo coverage
+- `src/app` - Android application module.
+- `src/benchmark` - Macrobenchmark module targeting `:app`.
+- `docs/` - Design notes, review artifacts, API migration notes, and Android Auto planning docs.
+- `graphics/` - Branding assets used by repository documentation.
+- `prompts/` - Development prompt artifacts.
+- `CHANGELOG.md` - Release notes for this repository.
+
+### App Stack
+
+- UI: Jetpack Compose, Material 3, Navigation Compose.
+- Playback: Media3/ExoPlayer, `MediaBrowserServiceCompat`, `MediaSessionCompat`, Android media notifications.
+- Networking: Retrofit 3, OkHttp 5, Gson, retry/backoff, HTTP cache, request deduplication.
+- Auth/data: `SettingsManager`, encrypted SharedPreferences, refresh-token persistence, URL normalization.
+- Images: Coil with memory and disk caching.
+- Background work: Kotlin coroutines and Flow.
+- Tests: JUnit 4, MockK, Truth, Robolectric, MockWebServer, AndroidX Test, Macrobenchmark, JaCoCo.
 
 ## Testing
 
-From `src/`:
+Run these commands from `src/`.
 
 ```bash
-# Unit tests
+# Local unit and Robolectric tests
 ./gradlew testDebugUnitTest
 
-# Instrumented/UI tests (requires emulator/device)
+# Full local build, lint, unit tests, app APKs, and benchmark module build
+./gradlew build
+
+# Connected app instrumentation tests, when a device/emulator is available
 ./gradlew connectedDebugAndroidTest
 
-# Macrobenchmarks (requires emulator/device)
+# Connected macrobenchmarks, when a device/emulator is available
 ./gradlew :benchmark:connectedCheck
 
-# Coverage report
+# JaCoCo coverage report
 ./gradlew jacocoTestReport
 ```
 
-CI runs `./gradlew build` and `./gradlew testDebugUnitTest` via GitHub Actions (`android.yml`).
+If the Android SDK is not discovered automatically, set `ANDROID_HOME` before running Gradle:
+
+```bash
+ANDROID_HOME=/path/to/Android/Sdk ./gradlew testDebugUnitTest
+```
+
+GitHub Actions installs Android SDK 36 and currently runs `./gradlew build --stacktrace`, `./gradlew :app:testDebugUnitTest --stacktrace`, and `./gradlew :app:jacocoTestReport --stacktrace`. Connected tests and benchmarks are present in the workflow but disabled until CI has an emulator or device runner.
 
 ## Documentation
 
-- Android Auto implementation notes: `docs/README.md`
-- Code and performance reviews: `docs/REVIEW-SUMMARY.md`, `docs/performance_review.md`, `docs/PERFORMANCE_ANALYSIS.md`
-- Implementation and migration details: `docs/implementation-summary.md`, `docs/MIGRATION-SUMMARY.md`
+- Current release notes: `CHANGELOG.md`
+- API v1 migration and reviews: `docs/API-CHANGES.md`, `docs/API-CHANGES-REVIEW.md`, `docs/API-CHANGES-FINAL-REVIEW.md`
+- Android Auto design and planning notes: `docs/ANDROID_AUTO_TECHNICAL_SPEC.md`, `docs/ANDROID_AUTO_ENHANCEMENT_CHECKLIST.md`
+- Performance and review notes: `docs/performance_review.md`, `docs/PERFORMANCE_ANALYSIS.md`, `docs/REVIEW-SUMMARY.md`
+- Test planning notes: `docs/test_map.md`, `docs/test_commands.md`
+
+Some files under `docs/` are historical review or planning artifacts. Prefer this README, `CHANGELOG.md`, and the Gradle build files as the current source of truth for setup and supported commands.
 
 ## Contributing
 
-1. Fork and create a feature branch (`git checkout -b feature/my-change`).
-2. Make changes, add tests when possible, and run the test suite.
-3. Open a PR describing the change and any user-facing impact (screenshots for UI tweaks help).
+1. Create a feature branch.
+2. Keep changes focused and add or update tests when behavior changes.
+3. Run `./gradlew testDebugUnitTest` for focused changes and `./gradlew build` before opening a PR.
+4. Include screenshots or screen recordings for visible UI changes.
+5. Describe any Android Auto, authentication, or API compatibility impact in the PR.
 
 ## License
 

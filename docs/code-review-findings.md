@@ -3,7 +3,7 @@
 **Date**: 2025-12-27  
 **Reviewer**: GitHub Copilot CLI  
 **Project**: Melodee Android Auto Player  
-**Version**: 1.7.1
+**Version**: 1.8.0
 
 ## Executive Summary
 
